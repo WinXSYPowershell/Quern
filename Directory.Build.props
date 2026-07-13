@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup>
+    <BaseOutputPath>cs_cache/bin/</BaseOutputPath>
+    <BaseIntermediateOutputPath>cs_cache/obj/</BaseIntermediateOutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <UseArtifactsOutput>false</UseArtifactsOutput>
+  </PropertyGroup>
+</Project> 
