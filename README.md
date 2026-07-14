@@ -69,26 +69,30 @@ Quern/
 5. 语言语法速查
 ----------------------------------------------------------------
 ```
-// 定义变量
-Set "Name" = "Quern"
-Set "Age" = 18
-Set "Score" += 10  // 复合赋值
+# 定义变量
+Set String "Name" = "Quern"
+Set Number "Age" = 18
+Set "Score" += 10
 
-// 定义列表
+# 定义列表
 List = "Fruits" = ["Apple", "Banana", "Orange"]
 
-// 流程控制
-If ("Age" > 18) {:
+Set Numebr "Age" = "18"
+If ("Age" == "18") cycle(4) {:
     Print ("成年") > CommandLine
-:} Else {:
+Else:
     Print ("未成年") > CommandLine
-:}
+}
 
-Cycle (5) {:
-    Print ("循环中...") > CommandLine
-:}
+# 流程控制
+If ("18" == "18")  cycle(4) {:
+    Print ("成年") > CommandLine
+Else:
+    Print ("未成年") > CommandLine
+}
 
-// 函数定义
+
+# 函数定义
 Fn "Main" (MainFn) {
     Print ("程序启动") > CommandLine
 }
