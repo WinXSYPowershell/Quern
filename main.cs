@@ -93,61 +93,67 @@ namespace QuernEngine
             return false;
         }
 
-        public void LoadAllMods(string directoryPath, QuernRuntime runtime)
+        // Modified: Load specific JS mod by filename
+        public void LoadJsMod(string filePath, QuernRuntime runtime)
         {
-            if (!Directory.Exists(directoryPath)) return;
-            Console.WriteLine($"[MOD] Scanning for mods in: {directoryPath}");
-            var jsFiles = Directory.GetFiles(directoryPath, "*.js");
-            foreach (var file in jsFiles)
+            if (!File.Exists(filePath))
             {
-                try { LoadJsMod(file, runtime); }
-                catch (Exception ex) { Console.WriteLine($"[MOD] Failed to load {file}: {ex.Message}"); }
+                Console.WriteLine($"[MOD] File not found: {filePath}");
+                return;
+            }
+
+            try 
+            {
+                // 1. 读取 JS 脚本内容
+                string scriptContent = File.ReadAllText(filePath);
+                
+                // 2. 【核心修改】直接将 C# 的原生命名空间暴露给 JS 环境
+                _jsEngine.SetValue("File", typeof(File));
+                _jsEngine.SetValue("Directory", typeof(Directory));
+                _jsEngine.SetValue("Path", typeof(Path));
+                _jsEngine.SetValue("Console", typeof(Console));
+                
+                // 3. 创建 API 包装器，保留原有的语法注册和 Runtime 功能
+                var apiWrapper = new
+                {
+                    Register = new Action<string, Func<object, object, bool>>((pattern, jsHandler) =>
+                    {
+                        SyntaxHandler csharpHandler = (line, tokens) =>
+                        {
+                            object[] jsTokens = tokens.Cast<object>().ToArray();
+                            try { return Convert.ToBoolean(jsHandler.Invoke(line, jsTokens)); }
+                            catch (Exception ex) { Console.WriteLine($"[JS Error] in handler for '{pattern}': {ex.Message}"); return false; }
+                        };
+                        RegisterSyntax(pattern, csharpHandler);
+                    }),
+                    Log = new Action<string>(msg => Console.WriteLine($"{msg}")),
+                    Runtime = runtime,
+                    GetVariable = new Func<string, string>((name) => runtime.GetVariableString(name)),
+                    GetList = new Func<string, List<string>>((name) => 
+                    {
+                        var l = runtime.GetList(name);
+                        return l != null ? l.Items : new List<string>();
+                    })
+                };
+        
+                // 4. 将 API 注入 JS 引擎并执行脚本
+                _jsEngine.SetValue("QuernAPI", apiWrapper);
+                _jsEngine.Execute(scriptContent);
+                Console.WriteLine($"[MOD] Loaded JS Module: {Path.GetFileName(filePath)}");
+            }
+            catch (Exception ex) { 
+                Console.WriteLine($"[MOD] Failed to load {filePath}: {ex.Message}"); 
             }
         }
-
-         private void LoadJsMod(string filePath, QuernRuntime runtime)
-         {
-             // 1. 读取 JS 脚本内容
-             string scriptContent = File.ReadAllText(filePath);
-             
-             // 2. 【核心修改】直接将 C# 的原生命名空间暴露给 JS 环境
-             _jsEngine.SetValue("File", typeof(File));
-             _jsEngine.SetValue("Directory", typeof(Directory));
-             _jsEngine.SetValue("Path", typeof(Path));
-             _jsEngine.SetValue("Console", typeof(Console));
-             
-             // 3. 创建 API 包装器，保留原有的语法注册和 Runtime 功能
-             var apiWrapper = new
-             {
-                 Register = new Action<string, Func<object, object, bool>>((pattern, jsHandler) =>
-                 {
-                     SyntaxHandler csharpHandler = (line, tokens) =>
-                     {
-                         object[] jsTokens = tokens.Cast<object>().ToArray();
-                         try { return Convert.ToBoolean(jsHandler.Invoke(line, jsTokens)); }
-                         catch (Exception ex) { Console.WriteLine($"[JS Error] in handler for '{pattern}': {ex.Message}"); return false; }
-                     };
-                     RegisterSyntax(pattern, csharpHandler);
-                 }),
-                 Log = new Action<string>(msg => Console.WriteLine($"{msg}")),
-                 Runtime = runtime,
-                 GetVariable = new Func<string, string>((name) => runtime.GetVariableString(name)),
-                 GetList = new Func<string, List<string>>((name) => 
-                 {
-                     var l = runtime.GetList(name);
-                     return l != null ? l.Items : new List<string>();
-                 })
-             };
-    
-    // 4. 将 API 注入 JS 引擎并执行脚本
-    _jsEngine.SetValue("QuernAPI", apiWrapper);
-    _jsEngine.Execute(scriptContent);
-}
 
         public void UnloadAllMods()
         {
             _loadedMods.Clear();
             _globalSyntaxMap.Clear();
+            // Note: Jint Engine doesn't have a simple "unload" for executed scripts, 
+            // but clearing the syntax map stops them from being called.
+            // For a full reset, one might need to recreate the Engine instance.
+            _jsEngine = new Engine(); 
         }
 
         private static List<string> SplitString(string s, char delimiter)
@@ -200,14 +206,21 @@ namespace QuernEngine
         // New Storage
         private Dictionary<string, QuernList> _lists = new Dictionary<string, QuernList>();
         
+        // New: Track requested imports for this execution context
+        private List<string> _requestedJsImports = new List<string>();
+        
         public bool DebugMode { get; set; } = false;
         
         // Track current execution context for error reporting
         private string _currentSourceFile = "Unknown";
         private int _currentLineNumber = 0;
 
-        public QuernRuntime()
+        // Reference to ModManager to trigger specific loads
+        private ModManager _modManager;
+
+        public QuernRuntime(ModManager modManager = null)
         {
+            _modManager = modManager;
             for (int i = 0; i < MAX_VARIABLES; i++) _variables[i] = new Variable();
         }
 
@@ -1047,7 +1060,8 @@ namespace QuernEngine
             // Pattern 2: Standard Set with optional Type
             // Matches: Set [Type] "Name" = Value
             // Type is optional. If present, it's String or Number.
-            Match stdSetMatch = Regex.Match(trimmed, @"^Set\s+(?: (String|Number) \s+)? ""([^""]+)"" \s*=\s*(.+)$", RegexOptions.IgnorePatternWhitespace);
+            // Fixed Regex: Removed extra spaces in group definition
+            Match stdSetMatch = Regex.Match(trimmed, @"^Set\s+(?:(String|Number)\s+)?""([^""]+)""\s*=\s*(.+)$");
             if (stdSetMatch.Success)
             {
                 string type = stdSetMatch.Groups[1].Value; // Can be empty
@@ -1365,27 +1379,112 @@ namespace QuernEngine
             }
         }
 
+        // --- NEW: Import and Include Handling ---
+
+        private string ResolveIncludedCode(string code, string baseDirectory, HashSet<string> includedFiles)
+        {
+            // Regex to find Include "filename.q"
+            // We process includes recursively.
+            var includeRegex = new Regex(@"^Include\s+""([^""]+)""\s*$", RegexOptions.Multiline);
+            
+            // We need to loop because replacing text changes indices/structure, 
+            // but simpler is to split by lines and process.
+            // However, regex replace is easier if we do it carefully.
+            // Let's use a MatchEvaluator.
+
+            string result = includeRegex.Replace(code, match =>
+            {
+                string fileName = match.Groups[1].Value;
+                string fullPath = Path.Combine(baseDirectory, fileName);
+                
+                // Normalize path to prevent duplicates via different paths (e.g. ./a.q vs a.q)
+                string normalizedPath = Path.GetFullPath(fullPath);
+
+                if (includedFiles.Contains(normalizedPath))
+                {
+                    Console.WriteLine($"[WARN] Circular Include Detected or Duplicate: {fileName}");
+                    return ""; // Return empty to avoid infinite recursion/duplication
+                }
+
+                if (!File.Exists(fullPath))
+                {
+                    Console.WriteLine($"[ERROR] Include file not found: {fullPath}");
+                    return "";
+                }
+
+                includedFiles.Add(normalizedPath);
+                string content = File.ReadAllText(fullPath);
+                
+                // Recursively resolve includes in the included file
+                // The base directory for the included file should be its own directory
+                string subDir = Path.GetDirectoryName(fullPath);
+                return ResolveIncludedCode(content, subDir, includedFiles);
+            });
+
+            return result;
+        }
+
         public int ParseAndExecuteCode(string codeContent, string sourceFile = "Unknown")
         {
             _currentSourceFile = sourceFile;
             
+            // Reset state
             foreach (var v in _variables) v.Used = false;
             foreach (var f in _functions) f.UsedInExecution = false;
             _functions.Clear();
             _lists.Clear();
+            _requestedJsImports.Clear();
 
-            // Note: Comments are removed during ExecuteFunctionBody -> PreProcessCode.
-            // However, the initial regex to find Functions runs on the RAW content.
-            // We should probably pre-process the whole file for comments before finding functions,
-            // OR ensure the regex is robust enough.
-            // Given the structure, Fn definitions are usually at top level.
-            // Let's pre-process the entire code content for comments first to be safe.
-            string cleanContent = PreProcessCode(codeContent);
+            string baseDirectory = Path.GetDirectoryName(sourceFile);
+            if (string.IsNullOrEmpty(baseDirectory)) baseDirectory = Directory.GetCurrentDirectory();
 
+            // 1. Handle Includes (Pre-processing)
+            // We use a HashSet to track included files to prevent circular dependencies
+            HashSet<string> includedFiles = new HashSet<string>();
+            // Add the main file to the set so it doesn't include itself if referenced relatively
+            includedFiles.Add(Path.GetFullPath(sourceFile));
+            
+            string expandedCode = ResolveIncludedCode(codeContent, baseDirectory, includedFiles);
+
+            // 2. Handle Imports (Scan for Import statements)
+            // Import "file.js"
+            var importRegex = new Regex(@"^Import\s+""([^""]+)""\s*$", RegexOptions.Multiline);
+            var importMatches = importRegex.Matches(expandedCode);
+            
+            foreach (Match match in importMatches)
+            {
+                string jsFile = match.Groups[1].Value;
+                _requestedJsImports.Add(jsFile);
+            }
+
+            // Remove Import lines from code so they don't cause syntax errors during parsing
+            string cleanCode = importRegex.Replace(expandedCode, "");
+
+            // 3. Load Requested JS Mods
+            if (_modManager != null && _requestedJsImports.Any())
+            {
+                string modsDir = Path.Combine(baseDirectory, "mods");
+                // Also check current directory if mods folder doesn't exist? 
+                // Spec says "mods下的.js文件", so we stick to mods folder relative to script or exe?
+                // Usually relative to script is better for portability, but let's check script dir/mods first.
+                if (!Directory.Exists(modsDir))
+                {
+                     // Fallback to exe directory mods folder if script dir doesn't have it
+                     modsDir = Path.Combine(Directory.GetCurrentDirectory(), "mods");
+                }
+
+                foreach (var jsFile in _requestedJsImports.Distinct())
+                {
+                    string fullPath = Path.Combine(modsDir, jsFile);
+                    _modManager.LoadJsMod(fullPath, this);
+                }
+            }
+
+            // 4. Parse Functions from Cleaned Code
             var fnRegex = new Regex(@"Fn\s+""([^""]+)""\s*\(([^)]*)\)\s*\{([\s\S]*?)\}", RegexOptions.Singleline);
-            var matches = fnRegex.Matches(cleanContent);
+            var matches = fnRegex.Matches(cleanCode);
 
-            if (matches.Count == 0 && !string.IsNullOrEmpty(cleanContent.Trim()))
+            if (matches.Count == 0 && !string.IsNullOrEmpty(cleanCode.Trim()))
             {
                  // If there is code but no functions defined at all
                  ReportError("NoFunctionsDefinedError");
@@ -1464,11 +1563,12 @@ namespace QuernEngine
             string inputFile = args[1];
 
             ModManager modManager = new ModManager();
-            QuernRuntime runtime = new QuernRuntime();
+            QuernRuntime runtime = new QuernRuntime(modManager); // Pass modManager to runtime
             runtime.DebugMode = true;
             
-            // Pass runtime to mod manager so hooks can be initialized
-            modManager.LoadAllMods("mods", runtime);
+            // Note: We no longer load ALL mods automatically here.
+            // Mods are loaded on-demand via Import statements in the script.
+            // modManager.LoadAllMods("mods", runtime); 
 
             if (command == "--Run")
             {
