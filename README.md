@@ -72,6 +72,7 @@ Quern/
 # 定义变量
 Set String "Name" = "Quern"
 Set Number "Age" = 18
+Set "Score" = 10
 Set "Score" += 10
 
 # 定义列表
