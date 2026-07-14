@@ -906,14 +906,14 @@ namespace QuernEngine
         {
             bool conditionMet = CheckCondition(ifStmt.Condition);
             
-            if (DebugMode) Console.WriteLine($"[If] Condition '{ifStmt.Condition}' is {(conditionMet ? "TRUE" : "FALSE")}");
+            if (DebugMode) Console.WriteLine($"");
 
             if (conditionMet)
             {
                 int loops = ifStmt.CycleCount;
                 for (int i = 0; i < loops; i++)
                 {
-                    if (DebugMode && loops > 1) Console.WriteLine($"[If-Cycle] Iteration {i+1}/{loops}");
+                    if (DebugMode && loops > 1) Console.WriteLine($"");
                     ExecuteStatements(ifStmt.TrueBody);
                 }
             }
@@ -1010,7 +1010,7 @@ namespace QuernEngine
             }
 
             _lists[name] = list;
-            if (DebugMode) Console.WriteLine($"[List] Registered '{name}' with {list.Items.Count} items.");
+            if (DebugMode) Console.WriteLine($"");
         }
 
         private void ExecuteSingleLine(string line)
