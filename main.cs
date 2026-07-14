@@ -113,7 +113,8 @@ namespace QuernEngine
                 _jsEngine.SetValue("Path", typeof(Path));
                 _jsEngine.SetValue("Console", typeof(Console));
                 
-                // 3. 创建 API 包装器，保留原有的语法注册和 Runtime 功能
+                // 3. 创建 API 包装器
+                // 注意：匿名对象属性之间必须有逗号，且结构必须完整闭合
                 var apiWrapper = new
                 {
                     Register = new Action<string, Func<object, object, bool>>((pattern, jsHandler) =>
@@ -133,6 +134,16 @@ namespace QuernEngine
                     {
                         var l = runtime.GetList(name);
                         return l != null ? l.Items : new List<string>();
+                    }),
+                    // [新增] 设置变量 - 映射到 runtime 的公共方法
+                    SetVariable = new Action<string, string, string>((name, type, value) => 
+                    {
+                        runtime.ApiSetVariable(name, type, value);
+                    }),
+                    // [新增] 执行单行 Quern 代码 - 映射到 runtime 的公共方法
+                    ExecuteLine = new Action<string>((line) => 
+                    {
+                        runtime.ApiExecuteLine(line);
                     })
                 };
         
@@ -224,6 +235,20 @@ namespace QuernEngine
             for (int i = 0; i < MAX_VARIABLES; i++) _variables[i] = new Variable();
         }
 
+        // --- Public API Helpers for JS Interop ---
+        
+        public void ApiSetVariable(string name, string type, string value)
+        {
+            // 调用内部的 SetVariable，注意内部版本可能接受 object，这里传入 string
+            SetVariable(name, type, value);
+        }
+
+        public void ApiExecuteLine(string line)
+        {
+            // 调用内部的 ExecuteSingleLine
+            ExecuteSingleLine(line);
+        }
+
         // --- Error Reporting Helpers ---
 
         private void ReportError(string message)
@@ -243,28 +268,92 @@ namespace QuernEngine
             return _variables.FirstOrDefault(v => v.Used && v.Name == name);
         }
 
-        public int SetVariable(string name, string type, string value)
-        {
-            var var = FindVariable(name);
-            if (var != null)
-            {
-                var.Type = type;
-                if (type == "String") var.StrVal = value;
-                else if (type == "Number" && int.TryParse(value, out int num)) var.NumVal = num;
-                return 0;
+        // 注意：这里保留了你提供的增强版 SetVariable，支持 object 类型
+        public int SetVariable(string name, string type, object value) { 
+            if (string.IsNullOrEmpty(name)) return -1;
+
+            // 1. 首先，遍历所有变量，尝试找到并更新已存在的变量
+            for (int i = 0; i < MAX_VARIABLES; i++) {
+                if (_variables[i].Used && string.Equals(_variables[i].Name, name, StringComparison.OrdinalIgnoreCase)) {
+                    // 找到了！直接更新
+                    _variables[i].Type = type;
+            
+                    // 增强类型转换逻辑
+                    if (type == "String") {
+                        _variables[i].StrVal = value?.ToString() ?? "";
+                    } else if (type == "Number") {
+                        // 尝试多种方式来解析数字，以兼容 JS 传来的布尔值
+                        int numVal = 0;
+                        bool parsed = false;
+
+                        if (value is int iVal) { // 如果直接就是 int
+                            numVal = iVal;
+                            parsed = true;
+                        } else if (value is bool bVal) { // 如果是 JS 传来的 bool
+                            numVal = bVal ? 1 : 0; // true -> 1, false -> 0
+                            parsed = true;
+                        } else if (value is string sVal) { // 如果是字符串
+                            // 先尝试直接解析数字
+                            if (int.TryParse(sVal, out int sNum)) {
+                                numVal = sNum;
+                                parsed = true;
+                            } else {
+                                // 再尝试解析 "True"/"False" 字符串
+                                if (bool.TryParse(sVal, out bool sBool)) {
+                                    numVal = sBool ? 1 : 0;
+                                    parsed = true;
+                                }
+                            }
+                        }
+
+                        if (parsed) {
+                            _variables[i].NumVal = numVal;
+                        }
+                    }
+                    return 0; // 成功更新
+                }
             }
-            for (int i = 0; i < MAX_VARIABLES; i++)
-            {
-                if (!_variables[i].Used)
-                {
+
+            // 2. 如果循环结束都没找到，说明是新变量，需要创建
+            for (int i = 0; i < MAX_VARIABLES; i++) {
+                if (!_variables[i].Used) {
+                    // 找到一个空位，创建新变量
                     _variables[i].Name = name;
                     _variables[i].Type = type;
                     _variables[i].Used = true;
-                    if (type == "String") _variables[i].StrVal = value;
-                    else if (type == "Number" && int.TryParse(value, out int num)) _variables[i].NumVal = num;
-                    return 0;
+
+                    // 创建新变量时也应用同样的增强逻辑
+                    if (type == "String") {
+                        _variables[i].StrVal = value?.ToString() ?? "";
+                    } else if (type == "Number") {
+                        int numVal = 0;
+                        bool parsed = false;
+                        
+                        if (value is int iVal) {
+                            numVal = iVal;
+                            parsed = true;
+                        } else if (value is bool bVal) {
+                            numVal = bVal ? 1 : 0;
+                            parsed = true;
+                        } else if (value is string sVal) {
+                            if (int.TryParse(sVal, out int sNum)) {
+                                numVal = sNum;
+                                parsed = true;
+                            } else if (bool.TryParse(sVal, out bool sBool)) {
+                                numVal = sBool ? 1 : 0;
+                                parsed = true;
+                            }
+                        }
+                    
+                        if (parsed) {
+                            _variables[i].NumVal = numVal;
+                        }
+                    }
+                    return 0; // 成功创建
                 }
             }
+
+            // 3. 如果所有位置都满了，报错
             ReportError("TooManyVariablesError");
             return -1;
         }
