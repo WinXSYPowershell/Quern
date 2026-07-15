@@ -1,9 +1,122 @@
-using System;
+using System.Text.RegularExpressions;
+using System.Diagnostics;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
+using System;
 using System.IO;
 using System.Linq;
-using System.Text.RegularExpressions;
 using Jint;
+using System.Text.Json;
+
+
+public class UnsafeSystem
+{
+    private bool _risksAccepted = false;
+    private HashSet<string> _allowedCommands = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    public void IAcceptAllRisks()
+    {
+    _risksAccepted = true;
+    Console.WriteLine("[UnsafeSystem] The user has clearly accepted this risk");
+    }
+    public string RunSafeCommand(string command, string args)
+    {
+        if (!_risksAccepted)
+        {
+            throw new Exception("[Security] Please call IAcceptAllRisks() first!");
+        }
+
+        if (!_allowedCommands.Contains(command))
+        {
+            throw new Exception($"[Security] Command '{command}' is not in the whitelist (cwl.json)!");
+        }
+
+        var startInfo = new ProcessStartInfo(command, args)
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        using var process = Process.Start(startInfo);
+        
+        process.WaitForExit(5000); 
+        
+        if (!process.HasExited)
+        {
+            process.Kill();
+            throw new Exception("[Security] Command execution timed out!");
+        }
+
+        return process.StandardOutput.ReadToEnd();
+    }
+}
+
+// 2. 补充完整的 SafeSubprocessWrapper 类
+public class SafeSubprocessWrapper
+{
+    // 定义白名单字段
+    private HashSet<string> _allowedCommands;
+
+    // 构造函数（你之前漏掉了这个类的定义，直接写了构造函数）
+    public SafeSubprocessWrapper()
+    {
+        _allowedCommands = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        string configPath = Path.Combine(AppContext.BaseDirectory, "cwl.json");
+        
+        if (File.Exists(configPath))
+        {
+            try
+            {
+                // 读取原始字节，Utf8JsonReader 直接处理字节，性能极高且无反射
+                byte[] jsonBytes = File.ReadAllBytes(configPath);
+                var reader = new Utf8JsonReader(jsonBytes);
+
+                bool inAllowedCommands = false;
+                
+                // 遍历 JSON 令牌
+                while (reader.Read())
+                {
+                    // 如果遇到属性名 "allowed_commands"
+                    if (reader.TokenType == JsonTokenType.PropertyName && 
+                        reader.GetString() == "allowed_commands")
+                    {
+                        // 读取下一个令牌，它应该是一个数组的开始 '['
+                        reader.Read();
+                        if (reader.TokenType == JsonTokenType.StartArray)
+                        {
+                            inAllowedCommands = true;
+                        }
+                    }
+                    
+                    // 如果正在读取白名单数组，且当前令牌是字符串
+                    if (inAllowedCommands && reader.TokenType == JsonTokenType.String)
+                    {
+                        string command = reader.GetString();
+                        if (!string.IsNullOrEmpty(command))
+                        {
+                            _allowedCommands.Add(command);
+                        }
+                    }
+                    
+                    // 如果遇到了数组结束 ']'，说明白名单读完了，跳出循环
+                    if (inAllowedCommands && reader.TokenType == JsonTokenType.EndArray)
+                    {
+                        break;
+                    }
+                }
+                
+                Console.WriteLine($"[SafeSystem] Successfully loaded {_allowedCommands.Count} commands from cwl.json");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SafeSystem] Failed to parse cwl.json: {ex.Message}");
+            }
+        }
+    }
+}
+
+
 
 namespace QuernEngine
 {
@@ -104,17 +217,27 @@ namespace QuernEngine
 
             try 
             {
-                // 1. 读取 JS 脚本内容
                 string scriptContent = File.ReadAllText(filePath);
                 
-                // 2. 【核心修改】直接将 C# 的原生命名空间暴露给 JS 环境
+                // 1. 暴露 System 命名空间下的常用静态类
+                _jsEngine.SetValue("Console", typeof(Console));
+                _jsEngine.SetValue("Math", typeof(Math));
+                _jsEngine.SetValue("Convert", typeof(Convert));
+                
+                // 2. 暴露 IO 操作
                 _jsEngine.SetValue("File", typeof(File));
                 _jsEngine.SetValue("Directory", typeof(Directory));
                 _jsEngine.SetValue("Path", typeof(Path));
-                _jsEngine.SetValue("Console", typeof(Console));
                 
-                // 3. 创建 API 包装器
-                // 注意：匿名对象属性之间必须有逗号，且结构必须完整闭合
+                var unsafeSystem = new UnsafeSystem();
+                _jsEngine.SetValue("UnsafeSystem", unsafeSystem);
+                
+                // 4. 暴露 正则表达式 (方便 JS 里做复杂解析)
+                _jsEngine.SetValue("Regex", typeof(System.Text.RegularExpressions.Regex));
+                
+                var SafeSystem = new SafeSubprocessWrapper();
+                _jsEngine.SetValue("SafeSystem", SafeSystem);
+                // 5. 暴露 Quern 自身的 API
                 var apiWrapper = new
                 {
                     Register = new Action<string, Func<object, object, bool>>((pattern, jsHandler) =>
@@ -134,20 +257,9 @@ namespace QuernEngine
                     {
                         var l = runtime.GetList(name);
                         return l != null ? l.Items : new List<string>();
-                    }),
-                    // [新增] 设置变量 - 映射到 runtime 的公共方法
-                    SetVariable = new Action<string, string, string>((name, type, value) => 
-                    {
-                        runtime.ApiSetVariable(name, type, value);
-                    }),
-                    // [新增] 执行单行 Quern 代码 - 映射到 runtime 的公共方法
-                    ExecuteLine = new Action<string>((line) => 
-                    {
-                        runtime.ApiExecuteLine(line);
                     })
                 };
         
-                // 4. 将 API 注入 JS 引擎并执行脚本
                 _jsEngine.SetValue("QuernAPI", apiWrapper);
                 _jsEngine.Execute(scriptContent);
                 Console.WriteLine($"[MOD] Loaded JS Module: {Path.GetFileName(filePath)}");
