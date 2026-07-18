@@ -1,3 +1,4 @@
-Use two commands to run:
+Use three commands to run:
 dotnet run // Run the project
 dotnet publish -c Release -r win-x64 && copy "cs_cache\bin\x64\Release\win-x64\publish\QuernProject.exe" "QuernInterpreter.exe" /Y // Build to a exe file
+dotnet publish -c Release -r linux-x64 /p:PublishAot=true && mv cs_cache/bin/Release/linux-x64/publish/QuernProject // Build all project to ELF file
