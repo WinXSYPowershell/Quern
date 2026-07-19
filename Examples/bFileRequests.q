@@ -1,7 +1,5 @@
 Import "bFileRequests.js"
 Fn "Main"(MainFn) {
-    # 1. 使用正斜杠 \ 代替反斜杠 \
-    # 这样路径 "logs\access.log" 不会被错误分割
     NewFile "logs\access.log"
     Print ("Created initial log file.") > CommandLine
 
