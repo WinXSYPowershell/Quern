@@ -75,31 +75,6 @@ QuernAPI.Register("InputNumber", function(line, tokens) {
     return true;
 });
 
-QuernAPI.Register("InputKey", function(line, tokens) {
-     var prompt = "";
-     var varName = "";
-
-     if (tokens.length >= 4 && tokens[2] === "=") {
-         prompt = tokens[1].replace(/^"|"$/g, '');
-         varName = tokens[3].replace(/^"|"$/g, '');
-     } 
-     else if (tokens.length === 3 && tokens[1] === "=") {
-         varName = tokens[2].replace(/^"|"$/g, '');
-     } else {
-         return false; 
-     }
-
-     if (!varName) return false;
-
-     if (prompt) QuernAPI.Log(prompt);
-     else QuernAPI.Log("Press any key...");
-
-     var keyInfo = Console.ReadKey(true); 
-     var keyName = keyInfo.Key.toString();
-     
-     setVar(varName, keyName, "String");
-     return true;
-});
 
 QuernAPI.Register("Wait", function(line, tokens) {
     var match = line.match(/Wait\s*\(\s*(\d+)\s*\)/i);
