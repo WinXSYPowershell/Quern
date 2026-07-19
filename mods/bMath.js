@@ -83,7 +83,7 @@ QuernAPI.Register("Ceiling", function(line, tokens) {
         var num = getNumericValue(tokens, 1);
         if (num === null) throw "Invalid number or variable";
         
-        QuernAPI.Log(Math.ceil(num));
+        QuernAPI.Log(Math.Ceiling(num));
         return true;
     } catch (e) {
         QuernAPI.Log("[BMath Error] in 'Ceiling': " + e);
