@@ -3,6 +3,8 @@
 ![Langs1](https://img.shields.io/badge/lang-csharp-blue.svg)
 ![Langs2](https://img.shields.io/badge/lang-javascript-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
+#### Quern：专为商业软件打造的极速脚本引擎。基于 C# AOT，毫秒级冷启动，10MB 极致轻量。让你的插件系统告别卡顿。
+
 ![Logo](./logo/quern-lang.png)
 
 
