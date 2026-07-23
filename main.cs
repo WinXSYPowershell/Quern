@@ -1,3 +1,11 @@
+// -----------------------------------------------------------------------
+// <copyright file="QuernEngine.cs" company="Quern Project">
+//     Copyright (c) 2026 Quern Engine. All rights reserved.
+//     Licensed under the MIT License. See LICENSE file in the project root.
+//     Author: WinXSYPowershell
+//     Bilibili Website: https://space.bilibili.com/3546630315837635?spm_id_from=333.40164.0.0
+// </copyright>
+// -----------------------------------------------------------------------
 using System.Text.RegularExpressions;
 using System.Diagnostics;
 using System.Collections.Generic;
@@ -7,7 +15,6 @@ using System.IO;
 using System.Linq;
 using Jint;
 using System.Text.Json;
-
 
 public class UnsafeSystem
 {
@@ -318,6 +325,18 @@ namespace QuernEngine
 
     public class QuernRuntime
     {
+        public void SetList(string name, QuernList list)
+        {
+            if (_lists.ContainsKey(name))
+            {
+                _lists[name] = list; // 覆盖
+            }
+            else
+            {
+                _lists.Add(name, list); // 新增
+            }
+            if (DebugMode) Console.WriteLine($"[System] List '{name}' updated. Count: {list.Items.Count}");
+        }
         private const int MAX_VARIABLES = 100;
         private const int MAX_FUNCTIONS = 100;
         private const int MAX_LIST_ITEMS = 10000;
@@ -365,12 +384,21 @@ namespace QuernEngine
 
         private void ReportError(string message)
         {
-            Console.WriteLine($"ERROR!{message}:(Line{_currentLineNumber})");
+            // save colour
+            var originalColor = Console.ForegroundColor;
+            // set colour to red
+            Console.ForegroundColor = ConsoleColor.Red;
+            // Print error message
+            Console.WriteLine($"[ERROR!]{message}:(Line{_currentLineNumber})");
+            Console.ForegroundColor = originalColor;
         }
 
         private void ReportWarning(string message)
         {
+            var originalColor = Console.ForegroundColor;
+            Console.ForegroundColor = ConsoleColor.Yellow;
             Console.WriteLine($"WARN!{message}:(Line{_currentLineNumber})");
+            Console.ForegroundColor = originalColor;
         }
 
         // --- Variable Accessors ---
@@ -546,6 +574,21 @@ namespace QuernEngine
                     if(depth==0 && i < expr.Length-1) { match = false; break; }
                 }
                 if(match) return EvaluateExpression(expr.Substring(1, expr.Length-2));
+            }
+            if (!int.TryParse(expr, out int directVal)) 
+            {
+                string varVal = GetVariableString(expr);
+        // 如果返回的不是原字符串，说明找到了变量
+                if (varVal != expr) 
+                {
+                    if(int.TryParse(varVal, out int vVal)) return vVal;
+                    return 0;
+                }
+            }
+            else
+            {
+        // 如果是纯数字，直接返回
+                return directVal;
             }
 
             // Check for List Reference: L+Name+Index
@@ -1752,6 +1795,7 @@ namespace QuernEngine
 
             if (args.Length < 2)
             {
+                Console.WriteLine("[Quern Engine v1.5] (C) 2026 WinXSYPowershell | MIT License | Bilibili: space.bilibili.com/3546630315837635");
                 Console.WriteLine("Quern Lang C# Edition");
                 Console.WriteLine("Usage: Quern.exe <Command> <Script_Name.q>");
                 Console.WriteLine("Commands:");
