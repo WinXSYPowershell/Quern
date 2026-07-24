@@ -1,0 +1,17 @@
+# 测试脚本任务
+test-script:
+  image: ubuntu:latest
+  
+  only:
+    - main
+    - merge_requests
+  
+  script:
+    - apt-get update && apt-get install -y unzip
+    
+    - wget -O QI.zip "https://gitcode.com/2401_86702825/Quern/releases/download/1.6.1.0/Quern-LSDK.zip"
+    
+    - unzip QI.zip
+    
+    - chmod +x QI
+    - ./QI --Run Examples/test.q
