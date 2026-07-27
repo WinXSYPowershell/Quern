@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------
-// <copyright file="main.cs" company="Quern Project">
+// <copyright file="Json,.js" company="Quern Project">
 //     Copyright 2026 WinXSYPowershell
 //
 //     Licensed under the Apache License, Version 2.0 (the "License");
