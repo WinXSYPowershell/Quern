@@ -245,8 +245,8 @@ QuernAPI.Register(commandName, handlerFunction): 注册新指令。
 
 
 # 开源
-## 本项目基于MIT协议开源
-### MIT网址：https://mit-license.org/
+## 本项目基于Apache 2.0协议开源
+### Apache 2.0网址：https://www.apache.org/licenses/LICENSE-2.0.txt
 ## 作者：WinXSYPowershell
 ### 个人空间：https://space.bilibili.com/3546630315837635?spm_id_from=333.1007.0.0
 ## 感谢您的下载和Star！
