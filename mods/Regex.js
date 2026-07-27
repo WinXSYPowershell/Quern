@@ -99,49 +99,27 @@ QuernAPI.Register("RegexString", function(line, tokens) {
         }
 
         // --- 执行正则匹配 ---
-        try {
-            var strInput = String(inputValue);
-            
+try {
+    var strInput = String(inputValue);
+    var result = "";
+    
+    // 直接使用 JavaScript 的正则引擎
+    var jsRegex = new RegExp(pattern);
+    var jsMatch = jsRegex.exec(strInput);
+    if (jsMatch) {
+        result = jsMatch[0];
+        QuernAPI.Log("[Regex Debug] Match found: '" + result + "'");
+    } else {
+        QuernAPI.Log("[Regex Debug] No match found.");
+    }
 
-            var result = "";
-            
-            try {
-                var regexInst = new Regex(pattern);
-                // 执行 Match
-                var matchObj = regexInst.Match(strInput);
-                
-                if (matchObj && matchObj.Success) {
-                    result = matchObj.Value;
-                    QuernAPI.Log("[Regex Debug] Match found: '" + result + "'");
-                } else {
-                    QuernAPI.Log("[Regex Debug] No match found.");
-                }
-                ;
-            } catch (e_net) {
-                ;
-                
-                try {
-                    var jsRegex = new RegExp(pattern);
-                    var jsMatch = jsRegex.exec(strInput);
-                    if (jsMatch) {
-                        result = jsMatch[0];
-                    }
-                } catch (e_js) {
-                    QuernAPI.Log("[Regex Error] JS Fallback also failed: " + e_js.message);
-                }
-            }
+    QuernAPI.Runtime.ApiSetVariable(targetVarName, "String", result ? result : "");
+    return true;
+} catch (e) {
+    QuernAPI.Log("[Regex Error] Critical execution error: " + e.message);
+    return true;
+}
 
             QuernAPI.Runtime.ApiSetVariable(targetVarName, "String", result ? result : "");
-            
             return true;
-
-        } catch (e) {
-            QuernAPI.Log("[Regex Error] Critical execution error: " + e.message);
-            return true;
-        }
-
-    } catch (e) {
-        QuernAPI.Log("[Regex Error] Critical parsing error: " + e.message);
-        return true;
-    }
 });
