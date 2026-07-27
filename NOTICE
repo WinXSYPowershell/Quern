@@ -1,2 +1,4 @@
 Quern
 Copyright 2026 WinXSYPowershell
+
+Quern：专为商业软件打造的极速脚本引擎。基于 C# AOT，毫秒级冷启动，10MB 极致轻量。让你的插件系统告别卡顿。
