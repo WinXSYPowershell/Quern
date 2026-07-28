@@ -766,82 +766,110 @@ namespace QuernEngine
             return null;
         }
 
-        private bool EvaluateSimpleCondition(string cond) {
-            cond = cond.Trim();
-            // Order matters: check two-char operators first
-            string[] ops = { "<=", ">=", "==", "!=", "<", ">" };
-            
-            foreach (string op in ops) {
-                int idx = cond.IndexOf(op);
-                if (idx != -1) {
-                    // Ensure we don't match part of a longer operator incorrectly, 
-                    // though simple IndexOf is usually fine for these specific sets.
-                    // For robustness, we assume standard formatting.
-                    
-                    string leftPart = cond.Substring(0, idx).Trim();
-                    string rightPart = cond.Substring(idx + op.Length).Trim();
+private bool EvaluateSimpleCondition(string cond)
+{
+    cond = cond.Trim();
+    
+    // 1. 修改重点：把双字符操作符放在前面，单字符放在后面
+    // 这样能确保 "==" 不会被 "=" (如果有的话) 或 "<" 误判
+    string[] ops = { "==", "!=", "<=", ">=", "<", ">" };
+    
+    string foundOp = null;
+    int opIndex = -1;
 
-                    int? leftNumericVal = null;
-                    int? rightNumericVal = null;
-
-                    // --- 处理左侧值 ---
-                    string leftResolved = ResolveComplexReference(leftPart);
-                    if (leftResolved != null) {
-                        if (int.TryParse(leftResolved, out int lVal)) {
-                            leftNumericVal = lVal;
-                        }
-                    } else {
-                        string leftVarVal = GetVariableString(leftPart);
-                        if (leftVarVal != leftPart) {
-                            if (int.TryParse(leftVarVal, out int lVal)) {
-                                leftNumericVal = lVal;
-                            }
-                        }
-                    }
-
-                    // --- 处理右侧值 (逻辑同上) ---
-                    string rightResolved = ResolveComplexReference(rightPart);
-                    if (rightResolved != null) {
-                        if (int.TryParse(rightResolved, out int rVal)) {
-                            rightNumericVal = rVal;
-                        }
-                    } else {
-                        string rightVarVal = GetVariableString(rightPart);
-                        if (rightVarVal != rightPart) {
-                            if (int.TryParse(rightVarVal, out int rVal)) {
-                                rightNumericVal = rVal;
-                            }
-                        }
-                    }
-
-                    // --- 执行比较 ---
-                    if (leftNumericVal.HasValue && rightNumericVal.HasValue) {
-                        int l = leftNumericVal.Value;
-                        int r = rightNumericVal.Value;
-                        switch (op) {
-                            case "<": return l < r;
-                            case ">": return l > r;
-                            case "<=": return l <= r;
-                            case ">=": return l >= r;
-                            case "==": return l == r;
-                            case "!=": return l != r;
-                        }
-                    } else {
-                        // Fallback to string comparison if not numeric
-                        switch (op) {
-                            case "==": return leftPart == rightPart;
-                            case "!=": return leftPart != rightPart;
-                            default:
-                                ReportWarning($"NonNumericComparisonWarning Op='{op}' Left='{leftPart}' Right='{rightPart}'");
-                                return false;
-                        }
-                    }
-                }
+    // 2. 修改重点：遍历寻找“最左边”出现的操作符
+    foreach (string op in ops)
+    {
+        int idx = cond.IndexOf(op);
+        if (idx != -1)
+        {
+            // 如果还没找到操作符，或者找到的这个比之前的更靠左
+            if (opIndex == -1 || idx < opIndex)
+            {
+                opIndex = idx;
+                foundOp = op;
             }
-            // Fallback: Evaluate as expression (non-zero is true)
-            int val = EvaluateExpression(cond);
-            return val != 0;
         }
+    }
+
+    // 如果找到了操作符
+    if (foundOp != null)
+    {
+        string leftPart = cond.Substring(0, opIndex).Trim();
+        string rightPart = cond.Substring(opIndex + foundOp.Length).Trim();
+
+        int? leftNumericVal = null;
+        int? rightNumericVal = null;
+
+        // --- 处理左侧值 ---
+        string leftResolved = ResolveComplexReference(leftPart);
+        if (leftResolved != null)
+        {
+            if (int.TryParse(leftResolved, out int lVal)) leftNumericVal = lVal;
+        }
+        else
+        {
+            string leftVarVal = GetVariableString(leftPart);
+            // 只有当返回值不等于原字符串时，才说明是变量
+            if (leftVarVal != leftPart)
+            {
+                if (int.TryParse(leftVarVal, out int lVal)) leftNumericVal = lVal;
+            }
+        }
+
+        // --- 处理右侧值 ---
+        string rightResolved = ResolveComplexReference(rightPart);
+        if (rightResolved != null)
+        {
+            if (int.TryParse(rightResolved, out int rVal)) rightNumericVal = rVal;
+        }
+        else
+        {
+            string rightVarVal = GetVariableString(rightPart);
+            if (rightVarVal != rightPart)
+            {
+                if (int.TryParse(rightVarVal, out int rVal)) rightNumericVal = rVal;
+            }
+        }
+
+        // --- 执行比较 ---
+        if (leftNumericVal.HasValue && rightNumericVal.HasValue)
+        {
+            int l = leftNumericVal.Value;
+            int r = rightNumericVal.Value;
+            switch (foundOp)
+            {
+                case "<": return l < r;
+                case ">": return l > r;
+                case "<=": return l <= r;
+                case ">=": return l >= r;
+                case "==": return l == r;
+                case "!=": return l != r;
+            }
+        }
+        else
+        {
+            // 非数字比较（字符串比较）
+            // 注意：这里直接用 leftPart 和 rightPart 比较，或者用解析后的值
+            // 为了保险，如果解析失败，我们回退到原始字符串比较
+            string lStr = leftResolved ?? (leftNumericVal.HasValue ? leftNumericVal.Value.ToString() : leftPart);
+            string rStr = rightResolved ?? (rightNumericVal.HasValue ? rightNumericVal.Value.ToString() : rightPart);
+
+            switch (foundOp)
+            {
+                case "==": return lStr == rStr;
+                case "!=": return lStr != rStr;
+                default:
+                    ReportWarning($"NonNumericComparisonWarning Op='{foundOp}' Left='{lStr}' Right='{rStr}'");
+                    return false;
+            }
+        }
+    }
+
+    // 如果没有找到比较操作符，视为表达式求值（非0即真）
+    int val = EvaluateExpression(cond);
+    return val != 0;
+}
 
         private bool CheckCondition(string condition)
         {
@@ -1804,7 +1832,7 @@ namespace QuernEngine
 
             if (args.Length < 2)
             {
-                Console.WriteLine("[Quern Engine v1.5] (C) 2026 WinXSYPowershell | MIT License | Bilibili: space.bilibili.com/3546630315837635");
+                Console.WriteLine("[Quern Engine v1.5] (C) 2026 WinXSYPowershell | Apache 2.0 License | Bilibili: space.bilibili.com/3546630315837635");
                 Console.WriteLine("Quern Lang C# Edition");
                 Console.WriteLine("Usage: Quern.exe <Command> <Script_Name.q>");
                 Console.WriteLine("Commands:");
