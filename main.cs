@@ -391,7 +391,7 @@ namespace QuernEngine
 
         // --- Error Reporting Helpers ---
 
-        private void ReportError(string message)
+        private void ReportError(string message, string sourceLine = null)
         {
             // save colour
             var originalColor = Console.ForegroundColor;
@@ -399,6 +399,25 @@ namespace QuernEngine
             Console.ForegroundColor = ConsoleColor.Red;
             // Print error message
             Console.WriteLine($"[ERROR!]{message}:(Line{_currentLineNumber})");
+                // 如果传入了源码行，则换行打印并标记位置
+                if (!string.IsNullOrEmpty(sourceLine))
+                {
+                    Console.WriteLine(); // 换行
+                    Console.WriteLine($"Source: {sourceLine.Trim()}");
+                    
+                    // 这是一个启发式算法，为了让 [HERE] 大致对齐
+                    int markerIndex = message.IndexOf("'");
+                    if (markerIndex > 0)
+                    {
+                         // 计算前缀长度: "[ERROR!] " + 错误码 + ": "
+                         // 因为不同字体宽度不同，强行对齐反而容易乱。
+                         // 为了保持紧凑，只打印 Source 行。
+                    }
+                }
+                else
+                {
+                     Console.WriteLine();
+                }
             Console.ForegroundColor = originalColor;
         }
 
@@ -406,7 +425,7 @@ namespace QuernEngine
         {
             var originalColor = Console.ForegroundColor;
             Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine($"WARN!{message}:(Line{_currentLineNumber})");
+            Console.WriteLine($"[WARN!]{message}:(Line{_currentLineNumber})");
             Console.ForegroundColor = originalColor;
         }
 
@@ -503,7 +522,7 @@ namespace QuernEngine
             }
 
             // 3. 如果所有位置都满了，报错
-            ReportError("TooManyVariablesError");
+            ReportError("Q01:VariablePoolFull");
             return -1;
         }
 
@@ -548,7 +567,7 @@ namespace QuernEngine
         {
             if (_functions.Count >= MAX_FUNCTIONS)
             {
-                ReportError("TooManyFunctionsError");
+                ReportError("Q02:FunctionFull");
                 return;
             }
             _functions.Add(new FunctionDef { Name = name, Body = body, IsMainFn = isMainFn, UsedInExecution = false });
@@ -716,13 +735,13 @@ namespace QuernEngine
                 case '-': return leftVal - rightVal;
                 case '*': return leftVal * rightVal;
                 case '/': 
-                    if (rightVal == 0) { ReportWarning("DivisionByZeroWarning"); return 0; }
+                    if (rightVal == 0) { ReportWarning("Q21:DivisionByZero"); return 0; }
                     return leftVal / rightVal;
                 case '#': // Integer Division //
-                    if (rightVal == 0) { ReportWarning("DivisionByZeroWarning"); return 0; }
+                    if (rightVal == 0) { ReportWarning("Q21:DivisionByZero"); return 0; }
                     return leftVal / rightVal;
                 case '%': 
-                    if (rightVal == 0) { ReportWarning("DivisionByZeroWarning"); return 0; }
+                    if (rightVal == 0) { ReportWarning("Q21:DivisionByZero"); return 0; }
                     return leftVal % rightVal;
                 default: return 0;
             }
@@ -750,7 +769,7 @@ namespace QuernEngine
                         }
                         else
                         {
-                            ReportWarning($"ListIndexOutOfRangeError List='{listName}' Index={index}");
+                            ReportWarning($"Q22:ListIndexOutOfRange List='{listName}' Index={index}");
                         }
                     }
                     else
@@ -860,7 +879,7 @@ private bool EvaluateSimpleCondition(string cond)
                 case "==": return lStr == rStr;
                 case "!=": return lStr != rStr;
                 default:
-                    ReportWarning($"NonNumericComparisonWarning Op='{foundOp}' Left='{lStr}' Right='{rStr}'");
+                    ReportWarning($"Q23:NonNumericComparison Op='{foundOp}' Left='{lStr}' Right='{rStr}'");
                     return false;
             }
         }
@@ -1242,12 +1261,12 @@ private bool EvaluateSimpleCondition(string cond)
                     }
                     else
                     {
-                        ReportError($"ListFullError Name='{name}'");
+                        ReportError($"Q06:ListFull Name='{name}'", trimmed);
                     }
                 }
                 else
                 {
-                    ReportError($"ListNotFoundError Name='{name}'");
+                    ReportError($"Q07:ListNotFound Name='{name}'", trimmed);
                 }
                 return;
             }
@@ -1266,7 +1285,7 @@ private bool EvaluateSimpleCondition(string cond)
                 }
                 else
                 {
-                    ReportError($"ListDeleteError Name='{name}' Index={index}");
+                    ReportError($"Q08:ListDelete Name='{name}' Index={index}", trimmed);
                 }
                 return;
             }
@@ -1287,7 +1306,7 @@ private bool EvaluateSimpleCondition(string cond)
                 }
                 else
                 {
-                    ReportError($"ListReplaceError Name='{name}' Index={index}");
+                    ReportError($"Q09:ListReplace Name='{name}' Index={index}", trimmed);
                 }
                 return;
             }
@@ -1306,7 +1325,7 @@ private bool EvaluateSimpleCondition(string cond)
                 Variable currentVar = FindVariable(varName);
                 if (currentVar == null)
                 {
-                    ReportError($"UndefinedVariableError Name='{varName}'");
+                    ReportError($"Q05:VariableNotFound Name='{varName}'", trimmed);
                     return;
                 }
 
@@ -1412,7 +1431,7 @@ private bool EvaluateSimpleCondition(string cond)
                 // Enforce "> CommandLine"
                 if (!trimmed.Contains("> CommandLine"))
                 {
-                    ReportError("MissingCommandLineTagError");
+                    ReportError("Q10:Missing'CommandLine'Tag", trimmed);
                     return;
                 }
 
@@ -1437,7 +1456,7 @@ private bool EvaluateSimpleCondition(string cond)
                         }
                         else
                         {
-                            ReportError($"UnresolvedPrintReferenceError Ref='{inner}'");
+                            ReportError($"Q12:UnresolvedPrintReference Ref='{inner}'", trimmed);
                             contentToPrint = $"[Unresolved: {inner}]";
                         }
                     }
@@ -1453,14 +1472,14 @@ private bool EvaluateSimpleCondition(string cond)
                         {
                             // Could be a literal number or undefined variable
                             if(int.TryParse(inner, out int litNum)) contentToPrint = inner;
-                            else ReportWarning($"UndefinedVariableInPrintWarning Var='{inner}'");
+                            else ReportWarning($"Q24:UndefinedVariableInPrint Var='{inner}'");
                             contentToPrint = inner;
                         }
                     }
                 }
                 else
                 {
-                    ReportError("MalformedPrintStatementError");
+                    ReportError("Q11:MalformedPrintStatement", trimmed);
                 }
 
                 if (contentToPrint != null) Console.WriteLine(contentToPrint);
@@ -1480,7 +1499,7 @@ private bool EvaluateSimpleCondition(string cond)
                     {
                         if (IsInCallStack(funcName))
                         {
-                            ReportError($"RecursiveCallDetectedError Func='{funcName}'");
+                            ReportError($"RecursiveCallDetectedError Name='{funcName}'", trimmed);
                         }
                         else
                         {
@@ -1498,13 +1517,13 @@ private bool EvaluateSimpleCondition(string cond)
                     }
                     else
                     {
-                        ReportError($"FunctionNotFoundError Name='{funcName}'");
+                        ReportError($"Q0:FunctionNotFound Name='{funcName}'", trimmed);
                     }
                 }
                 else if (!string.IsNullOrEmpty(trimmed))
                 {
                     // If it doesn't match any known command structure
-                    ReportWarning($"UnknownCommandOrSyntaxWarning Line='{trimmed}'");
+                    ReportWarning($"Q25:UnknownCommand Line='{trimmed}'");
                 }
             }
         }
@@ -1768,7 +1787,7 @@ private bool EvaluateSimpleCondition(string cond)
             if (matches.Count == 0 && !string.IsNullOrEmpty(cleanCode.Trim()))
             {
                  // If there is code but no functions defined at all
-                 ReportError("NoFunctionsDefinedError");
+                 ReportError("Q14:NoFunctionsDefined");
                  return -1;
             }
 
@@ -1805,7 +1824,7 @@ private bool EvaluateSimpleCondition(string cond)
             }
             else
             {
-                ReportError("MissingMainFunctionError");
+                ReportError("Eror Q13:MissingMainFunction");
                 return -1;
             }
         }
