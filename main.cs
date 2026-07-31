@@ -31,8 +31,8 @@ public class UnsafeSystem
     private HashSet<string> _allowedCommands = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     public void IAcceptAllRisks()
     {
-    _risksAccepted = true;
-    Console.WriteLine("[UnsafeSystem] The user has clearly accepted this risk");
+        _risksAccepted = true;
+        Console.WriteLine("[UnsafeSystem] The user has clearly accepted this risk");
     }
     public string RunSafeCommand(string command, string args)
     {
@@ -55,9 +55,9 @@ public class UnsafeSystem
         };
 
         using var process = Process.Start(startInfo);
-        
-        process.WaitForExit(5000); 
-        
+
+        process.WaitForExit(5000);
+
         if (!process.HasExited)
         {
             process.Kill();
@@ -79,7 +79,7 @@ public class SafeSubprocessWrapper
     {
         _allowedCommands = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         string configPath = Path.Combine(AppContext.BaseDirectory, "cwl.json");
-        
+
         if (File.Exists(configPath))
         {
             try
@@ -89,12 +89,12 @@ public class SafeSubprocessWrapper
                 var reader = new Utf8JsonReader(jsonBytes);
 
                 bool inAllowedCommands = false;
-                
+
                 // 遍历 JSON 令牌
                 while (reader.Read())
                 {
                     // 如果遇到属性名 "allowed_commands"
-                    if (reader.TokenType == JsonTokenType.PropertyName && 
+                    if (reader.TokenType == JsonTokenType.PropertyName &&
                         reader.GetString() == "allowed_commands")
                     {
                         // 读取下一个令牌，它应该是一个数组的开始 '['
@@ -104,7 +104,7 @@ public class SafeSubprocessWrapper
                             inAllowedCommands = true;
                         }
                     }
-                    
+
                     // 如果正在读取白名单数组，且当前令牌是字符串
                     if (inAllowedCommands && reader.TokenType == JsonTokenType.String)
                     {
@@ -114,14 +114,14 @@ public class SafeSubprocessWrapper
                             _allowedCommands.Add(command);
                         }
                     }
-                    
+
                     // 如果遇到了数组结束 ']'，说明白名单读完了，跳出循环
                     if (inAllowedCommands && reader.TokenType == JsonTokenType.EndArray)
                     {
                         break;
                     }
                 }
-                
+
                 Console.WriteLine($"[SafeSystem] Successfully loaded {_allowedCommands.Count} commands from cwl.json");
             }
             catch (Exception ex)
@@ -151,7 +151,7 @@ namespace QuernEngine
     {
         public string Name { get; set; }
         public List<string> Items { get; set; }
-        
+
         public QuernList()
         {
             Items = new List<string>();
@@ -231,26 +231,26 @@ namespace QuernEngine
                 return;
             }
 
-            try 
+            try
             {
                 string scriptContent = File.ReadAllText(filePath);
-                
+
                 // 1. 暴露 System 命名空间下的常用静态类
                 _jsEngine.SetValue("Console", typeof(Console));
                 _jsEngine.SetValue("Math", typeof(Math));
                 _jsEngine.SetValue("Convert", typeof(Convert));
-                
+
                 // 2. 暴露 IO 操作
                 _jsEngine.SetValue("File", typeof(File));
                 _jsEngine.SetValue("Directory", typeof(Directory));
                 _jsEngine.SetValue("Path", typeof(Path));
-                
+
                 var unsafeSystem = new UnsafeSystem();
                 _jsEngine.SetValue("UnsafeSystem", unsafeSystem);
-                
+
                 // 4. 暴露 正则表达式 (方便 JS 里做复杂解析)
                 _jsEngine.SetValue("Regex", typeof(System.Text.RegularExpressions.Regex));
-                
+
                 var SafeSystem = new SafeSubprocessWrapper();
                 _jsEngine.SetValue("SafeSystem", SafeSystem);
                 // 5. 暴露 Quern 自身的 API
@@ -269,19 +269,20 @@ namespace QuernEngine
                     Log = new Action<string>(msg => Console.WriteLine($"{msg}")),
                     Runtime = runtime,
                     GetVariable = new Func<string, string>((name) => runtime.GetVariableString(name)),
-                    GetList = new Func<string, List<string>>((name) => 
+                    GetList = new Func<string, List<string>>((name) =>
                     {
                         var l = runtime.GetList(name);
                         return l != null ? l.Items : new List<string>();
                     })
                 };
-        
+
                 _jsEngine.SetValue("QuernAPI", apiWrapper);
                 _jsEngine.Execute(scriptContent);
                 Console.WriteLine($"[MOD] Loaded JS Module: {Path.GetFileName(filePath)}");
             }
-            catch (Exception ex) { 
-                Console.WriteLine($"[MOD] Failed to load {filePath}: {ex.Message}"); 
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[MOD] Failed to load {filePath}: {ex.Message}");
             }
         }
 
@@ -292,7 +293,7 @@ namespace QuernEngine
             // Note: Jint Engine doesn't have a simple "unload" for executed scripts, 
             // but clearing the syntax map stops them from being called.
             // For a full reset, one might need to recreate the Engine instance.
-            _jsEngine = new Engine(); 
+            _jsEngine = new Engine();
         }
 
         private static List<string> SplitString(string s, char delimiter)
@@ -323,7 +324,7 @@ namespace QuernEngine
         public int CycleCount { get; set; }
         public List<string> BodyLines { get; set; }
         public List<LogicBlock> SubBlocks { get; set; }
-        
+
         public LogicBlock()
         {
             BodyLines = new List<string>();
@@ -334,6 +335,35 @@ namespace QuernEngine
 
     public class QuernRuntime
     {
+        // 供 JS 调用来执行单行代码，并捕获严格模式下的异常
+
+        public string ApiExecuteSingleLine(string line)
+        {
+            _isExecutingViaApi = true; // 上锁
+            try
+            {
+                ExecuteSingleLine(line);
+                return "0"; // 执行成功
+            }
+            catch (Exception e)
+            {
+                if (StrictMode && e.Message.StartsWith("Q"))
+                {
+                    return e.Message;
+                }
+                return "-1";
+            }
+            finally
+            {
+                _isExecutingViaApi = false; // 解锁
+            }
+        }
+        private void UpdateStatusVariable(string funcName, int errorCode)
+        {
+            string varName = "Quern_" + funcName + "_Status";
+            // 使用 SetVariable 更新状态
+            SetVariable(varName, "Number", errorCode);
+        }
         public void SetList(string name, QuernList list)
         {
             if (_lists.ContainsKey(name))
@@ -353,15 +383,17 @@ namespace QuernEngine
         private Variable[] _variables = new Variable[MAX_VARIABLES];
         private List<FunctionDef> _functions = new List<FunctionDef>();
         private Stack<string> _callStack = new Stack<string>();
-        
+
         // New Storage
         private Dictionary<string, QuernList> _lists = new Dictionary<string, QuernList>();
-        
+
         // New: Track requested imports for this execution context
         private List<string> _requestedJsImports = new List<string>();
-        
+
         public bool DebugMode { get; set; } = false;
-        
+        private bool _isExecutingViaApi = false;
+        public bool StrictMode { get; set; } = false;
+
         // Track current execution context for error reporting
         private string _currentSourceFile = "Unknown";
         private int _currentLineNumber = 0;
@@ -376,7 +408,7 @@ namespace QuernEngine
         }
 
         // --- Public API Helpers for JS Interop ---
-        
+
         public void ApiSetVariable(string name, string type, string value)
         {
             // 调用内部的 SetVariable，注意内部版本可能接受 object，这里传入 string
@@ -399,26 +431,37 @@ namespace QuernEngine
             Console.ForegroundColor = ConsoleColor.Red;
             // Print error message
             Console.WriteLine($"[ERROR!]{message}:(Line{_currentLineNumber})");
-                // 如果传入了源码行，则换行打印并标记位置
-                if (!string.IsNullOrEmpty(sourceLine))
-                {
-                    Console.WriteLine(); // 换行
-                    Console.WriteLine($"Source: {sourceLine.Trim()}");
-                    
-                    // 这是一个启发式算法，为了让 [HERE] 大致对齐
-                    int markerIndex = message.IndexOf("'");
-                    if (markerIndex > 0)
-                    {
-                         // 计算前缀长度: "[ERROR!] " + 错误码 + ": "
-                         // 因为不同字体宽度不同，强行对齐反而容易乱。
-                         // 为了保持紧凑，只打印 Source 行。
-                    }
-                }
-                else
-                {
-                     Console.WriteLine();
-                }
+
+            // 如果传入了源码行，则换行打印并标记位置
+            if (!string.IsNullOrEmpty(sourceLine))
+            {
+                Console.WriteLine(); // 换行
+                Console.WriteLine($"Source: {sourceLine.Trim()}");
+            }
+            else
+            {
+                Console.WriteLine();
+            }
+
             Console.ForegroundColor = originalColor;
+
+            string currentFunc = _callStack.Count > 0 ? _callStack.Peek() : "Main";
+
+            // 提取错误码 (例如从 "Q10:..." 提取 10)
+            string errorCodeStr = message.Split(':')[0];
+            int errorCode = -1;
+            if (errorCodeStr.StartsWith("Q") && int.TryParse(errorCodeStr.Substring(1), out int code))
+            {
+                errorCode = code;
+            }
+
+            UpdateStatusVariable(currentFunc, errorCode);
+
+            // 如果开启了严格模式，依然抛出异常（用于 JS 捕获或其他用途）
+            if (StrictMode)
+            {
+                throw new Exception(errorCodeStr);
+            }
         }
 
         private void ReportWarning(string message)
@@ -437,44 +480,60 @@ namespace QuernEngine
         }
 
         // 注意：这里保留了你提供的增强版 SetVariable，支持 object 类型
-        public int SetVariable(string name, string type, object value) { 
+        public int SetVariable(string name, string type, object value)
+        {
             if (string.IsNullOrEmpty(name)) return -1;
 
             // 1. 首先，遍历所有变量，尝试找到并更新已存在的变量
-            for (int i = 0; i < MAX_VARIABLES; i++) {
-                if (_variables[i].Used && string.Equals(_variables[i].Name, name, StringComparison.OrdinalIgnoreCase)) {
+            for (int i = 0; i < MAX_VARIABLES; i++)
+            {
+                if (_variables[i].Used && string.Equals(_variables[i].Name, name, StringComparison.OrdinalIgnoreCase))
+                {
                     // 找到了！直接更新
                     _variables[i].Type = type;
-            
+
                     // 增强类型转换逻辑
-                    if (type == "String") {
+                    if (type == "String")
+                    {
                         _variables[i].StrVal = value?.ToString() ?? "";
-                    } else if (type == "Number") {
+                    }
+                    else if (type == "Number")
+                    {
                         // 尝试多种方式来解析数字，以兼容 JS 传来的布尔值
                         int numVal = 0;
                         bool parsed = false;
 
-                        if (value is int iVal) { // 如果直接就是 int
+                        if (value is int iVal)
+                        { // 如果直接就是 int
                             numVal = iVal;
                             parsed = true;
-                        } else if (value is bool bVal) { // 如果是 JS 传来的 bool
+                        }
+                        else if (value is bool bVal)
+                        { // 如果是 JS 传来的 bool
                             numVal = bVal ? 1 : 0; // true -> 1, false -> 0
                             parsed = true;
-                        } else if (value is string sVal) { // 如果是字符串
+                        }
+                        else if (value is string sVal)
+                        { // 如果是字符串
                             // 先尝试直接解析数字
-                            if (int.TryParse(sVal, out int sNum)) {
+                            if (int.TryParse(sVal, out int sNum))
+                            {
                                 numVal = sNum;
                                 parsed = true;
-                            } else {
+                            }
+                            else
+                            {
                                 // 再尝试解析 "True"/"False" 字符串
-                                if (bool.TryParse(sVal, out bool sBool)) {
+                                if (bool.TryParse(sVal, out bool sBool))
+                                {
                                     numVal = sBool ? 1 : 0;
                                     parsed = true;
                                 }
                             }
                         }
 
-                        if (parsed) {
+                        if (parsed)
+                        {
                             _variables[i].NumVal = numVal;
                         }
                     }
@@ -483,37 +542,51 @@ namespace QuernEngine
             }
 
             // 2. 如果循环结束都没找到，说明是新变量，需要创建
-            for (int i = 0; i < MAX_VARIABLES; i++) {
-                if (!_variables[i].Used) {
+            for (int i = 0; i < MAX_VARIABLES; i++)
+            {
+                if (!_variables[i].Used)
+                {
                     // 找到一个空位，创建新变量
                     _variables[i].Name = name;
                     _variables[i].Type = type;
                     _variables[i].Used = true;
 
                     // 创建新变量时也应用同样的增强逻辑
-                    if (type == "String") {
+                    if (type == "String")
+                    {
                         _variables[i].StrVal = value?.ToString() ?? "";
-                    } else if (type == "Number") {
+                    }
+                    else if (type == "Number")
+                    {
                         int numVal = 0;
                         bool parsed = false;
-                        
-                        if (value is int iVal) {
+
+                        if (value is int iVal)
+                        {
                             numVal = iVal;
                             parsed = true;
-                        } else if (value is bool bVal) {
+                        }
+                        else if (value is bool bVal)
+                        {
                             numVal = bVal ? 1 : 0;
                             parsed = true;
-                        } else if (value is string sVal) {
-                            if (int.TryParse(sVal, out int sNum)) {
+                        }
+                        else if (value is string sVal)
+                        {
+                            if (int.TryParse(sVal, out int sNum))
+                            {
                                 numVal = sNum;
                                 parsed = true;
-                            } else if (bool.TryParse(sVal, out bool sBool)) {
+                            }
+                            else if (bool.TryParse(sVal, out bool sBool))
+                            {
                                 numVal = sBool ? 1 : 0;
                                 parsed = true;
                             }
                         }
-                    
-                        if (parsed) {
+
+                        if (parsed)
+                        {
                             _variables[i].NumVal = numVal;
                         }
                     }
@@ -596,53 +669,55 @@ namespace QuernEngine
             {
                 int depth = 0;
                 bool match = true;
-                for(int i=0; i<expr.Length; i++) {
-                    if(expr[i]=='(') depth++;
-                    if(expr[i]==')') depth--;
-                    if(depth==0 && i < expr.Length-1) { match = false; break; }
+                for (int i = 0; i < expr.Length; i++)
+                {
+                    if (expr[i] == '(') depth++;
+                    if (expr[i] == ')') depth--;
+                    if (depth == 0 && i < expr.Length - 1) { match = false; break; }
                 }
-                if(match) return EvaluateExpression(expr.Substring(1, expr.Length-2));
+                if (match) return EvaluateExpression(expr.Substring(1, expr.Length - 2));
             }
-            if (!int.TryParse(expr, out int directVal)) 
+            if (!int.TryParse(expr, out int directVal))
             {
                 string varVal = GetVariableString(expr);
-        // 如果返回的不是原字符串，说明找到了变量
-                if (varVal != expr) 
+                // 如果返回的不是原字符串，说明找到了变量
+                if (varVal != expr)
                 {
-                    if(int.TryParse(varVal, out int vVal)) return vVal;
+                    if (int.TryParse(varVal, out int vVal)) return vVal;
                     return 0;
                 }
             }
             else
             {
-        // 如果是纯数字，直接返回
+                // 如果是纯数字，直接返回
                 return directVal;
             }
 
             // Check for List Reference: L+Name+Index
             if (expr.Contains("L+"))
             {
-                 string resolvedVal = ResolveComplexReference(expr);
-                 if(resolvedVal != null) {
-                     if(int.TryParse(resolvedVal, out int rVal)) return rVal;
-                     return 0;
-                 }
+                string resolvedVal = ResolveComplexReference(expr);
+                if (resolvedVal != null)
+                {
+                    if (int.TryParse(resolvedVal, out int rVal)) return rVal;
+                    return 0;
+                }
             }
 
             // Operator precedence: We'll do a simple left-to-right scan for +, -, *, /, //, %
             // To keep it simple and robust for this engine, we look for the LAST occurrence of low-precedence ops (+, -)
             // then higher (*, /, //, %) if no +/- found.
-            
+
             char op = '\0';
             int opIndex = -1;
             int opLength = 1; // Default length for single char ops
-            
+
             int parenDepth = 0;
-            
+
             // First pass: Look for + and - (lowest precedence)
             // We scan from right to left to handle left-associativity correctly if we were doing recursive descent, 
             // but here we just split once. Let's find the RIGHTMOST + or - outside parentheses.
-            for (int i = expr.Length - 1; i >= 0; i--) 
+            for (int i = expr.Length - 1; i >= 0; i--)
             {
                 char c = expr[i];
                 if (c == ')') parenDepth++;
@@ -652,11 +727,11 @@ namespace QuernEngine
                     if (c == '+' || c == '-')
                     {
                         // Avoid treating L+ as operator
-                        if (i > 0 && expr[i-1] == 'L') continue;
-                        
+                        if (i > 0 && expr[i - 1] == 'L') continue;
+
                         // Avoid unary minus at start
                         if (c == '-' && i == 0) continue;
-                        
+
                         op = c;
                         opIndex = i;
                         break;
@@ -684,7 +759,7 @@ namespace QuernEngine
                         else if (c == '/')
                         {
                             // Check for //
-                            if (i > 0 && expr[i-1] == '/')
+                            if (i > 0 && expr[i - 1] == '/')
                             {
                                 op = '#'; // Use # to represent // internally
                                 opIndex = i;
@@ -705,18 +780,20 @@ namespace QuernEngine
             if (op == '\0')
             {
                 if (int.TryParse(expr, out int val)) return val;
-                
+
                 // Check if it's a variable name
                 string varVal = GetVariableString(expr);
-                if (varVal != expr) { // It was a variable
-                     if(int.TryParse(varVal, out int vVal)) return vVal;
-                     return 0;
+                if (varVal != expr)
+                { // It was a variable
+                    if (int.TryParse(varVal, out int vVal)) return vVal;
+                    return 0;
                 }
-                
+
                 // Check if it's a direct List ref like "L+MyList+0" without spaces
                 string complexVal = ResolveComplexReference(expr);
-                if(complexVal != null) {
-                    if(int.TryParse(complexVal, out int cVal)) return cVal;
+                if (complexVal != null)
+                {
+                    if (int.TryParse(complexVal, out int cVal)) return cVal;
                     return 0;
                 }
 
@@ -734,13 +811,13 @@ namespace QuernEngine
                 case '+': return leftVal + rightVal;
                 case '-': return leftVal - rightVal;
                 case '*': return leftVal * rightVal;
-                case '/': 
+                case '/':
                     if (rightVal == 0) { ReportWarning("Q21:DivisionByZero"); return 0; }
                     return leftVal / rightVal;
                 case '#': // Integer Division //
                     if (rightVal == 0) { ReportWarning("Q21:DivisionByZero"); return 0; }
                     return leftVal / rightVal;
-                case '%': 
+                case '%':
                     if (rightVal == 0) { ReportWarning("Q21:DivisionByZero"); return 0; }
                     return leftVal % rightVal;
                 default: return 0;
@@ -759,7 +836,7 @@ namespace QuernEngine
                     string listName = parts[1];
                     string indexStr = parts[2];
                     int index = EvaluateExpression(indexStr); // Index can be an expression
-                    
+
                     var list = GetList(listName);
                     if (list != null)
                     {
@@ -785,115 +862,115 @@ namespace QuernEngine
             return null;
         }
 
-private bool EvaluateSimpleCondition(string cond)
-{
-    cond = cond.Trim();
-    
-    // 1. 修改重点：把双字符操作符放在前面，单字符放在后面
-    // 这样能确保 "==" 不会被 "=" (如果有的话) 或 "<" 误判
-    string[] ops = { "==", "!=", "<=", ">=", "<", ">" };
-    
-    string foundOp = null;
-    int opIndex = -1;
-
-    // 2. 修改重点：遍历寻找“最左边”出现的操作符
-    foreach (string op in ops)
-    {
-        int idx = cond.IndexOf(op);
-        if (idx != -1)
+        private bool EvaluateSimpleCondition(string cond)
         {
-            // 如果还没找到操作符，或者找到的这个比之前的更靠左
-            if (opIndex == -1 || idx < opIndex)
+            cond = cond.Trim();
+
+            // 1. 修改重点：把双字符操作符放在前面，单字符放在后面
+            // 这样能确保 "==" 不会被 "=" (如果有的话) 或 "<" 误判
+            string[] ops = { "==", "!=", "<=", ">=", "<", ">" };
+
+            string foundOp = null;
+            int opIndex = -1;
+
+            // 2. 修改重点：遍历寻找“最左边”出现的操作符
+            foreach (string op in ops)
             {
-                opIndex = idx;
-                foundOp = op;
+                int idx = cond.IndexOf(op);
+                if (idx != -1)
+                {
+                    // 如果还没找到操作符，或者找到的这个比之前的更靠左
+                    if (opIndex == -1 || idx < opIndex)
+                    {
+                        opIndex = idx;
+                        foundOp = op;
+                    }
+                }
             }
-        }
-    }
 
-    // 如果找到了操作符
-    if (foundOp != null)
-    {
-        string leftPart = cond.Substring(0, opIndex).Trim();
-        string rightPart = cond.Substring(opIndex + foundOp.Length).Trim();
-
-        int? leftNumericVal = null;
-        int? rightNumericVal = null;
-
-        // --- 处理左侧值 ---
-        string leftResolved = ResolveComplexReference(leftPart);
-        if (leftResolved != null)
-        {
-            if (int.TryParse(leftResolved, out int lVal)) leftNumericVal = lVal;
-        }
-        else
-        {
-            string leftVarVal = GetVariableString(leftPart);
-            // 只有当返回值不等于原字符串时，才说明是变量
-            if (leftVarVal != leftPart)
+            // 如果找到了操作符
+            if (foundOp != null)
             {
-                if (int.TryParse(leftVarVal, out int lVal)) leftNumericVal = lVal;
-            }
-        }
+                string leftPart = cond.Substring(0, opIndex).Trim();
+                string rightPart = cond.Substring(opIndex + foundOp.Length).Trim();
 
-        // --- 处理右侧值 ---
-        string rightResolved = ResolveComplexReference(rightPart);
-        if (rightResolved != null)
-        {
-            if (int.TryParse(rightResolved, out int rVal)) rightNumericVal = rVal;
-        }
-        else
-        {
-            string rightVarVal = GetVariableString(rightPart);
-            if (rightVarVal != rightPart)
-            {
-                if (int.TryParse(rightVarVal, out int rVal)) rightNumericVal = rVal;
-            }
-        }
+                int? leftNumericVal = null;
+                int? rightNumericVal = null;
 
-        // --- 执行比较 ---
-        if (leftNumericVal.HasValue && rightNumericVal.HasValue)
-        {
-            int l = leftNumericVal.Value;
-            int r = rightNumericVal.Value;
-            switch (foundOp)
-            {
-                case "<": return l < r;
-                case ">": return l > r;
-                case "<=": return l <= r;
-                case ">=": return l >= r;
-                case "==": return l == r;
-                case "!=": return l != r;
-            }
-        }
-        else
-        {
-            // 非数字比较（字符串比较）
-            // 注意：这里直接用 leftPart 和 rightPart 比较，或者用解析后的值
-            // 为了保险，如果解析失败，我们回退到原始字符串比较
-            string lStr = leftResolved ?? (leftNumericVal.HasValue ? leftNumericVal.Value.ToString() : leftPart);
-            string rStr = rightResolved ?? (rightNumericVal.HasValue ? rightNumericVal.Value.ToString() : rightPart);
+                // --- 处理左侧值 ---
+                string leftResolved = ResolveComplexReference(leftPart);
+                if (leftResolved != null)
+                {
+                    if (int.TryParse(leftResolved, out int lVal)) leftNumericVal = lVal;
+                }
+                else
+                {
+                    string leftVarVal = GetVariableString(leftPart);
+                    // 只有当返回值不等于原字符串时，才说明是变量
+                    if (leftVarVal != leftPart)
+                    {
+                        if (int.TryParse(leftVarVal, out int lVal)) leftNumericVal = lVal;
+                    }
+                }
 
-            switch (foundOp)
-            {
-                case "==": return lStr == rStr;
-                case "!=": return lStr != rStr;
-                default:
-                    ReportWarning($"Q23:NonNumericComparison Op='{foundOp}' Left='{lStr}' Right='{rStr}'");
-                    return false;
-            }
-        }
-    }
+                // --- 处理右侧值 ---
+                string rightResolved = ResolveComplexReference(rightPart);
+                if (rightResolved != null)
+                {
+                    if (int.TryParse(rightResolved, out int rVal)) rightNumericVal = rVal;
+                }
+                else
+                {
+                    string rightVarVal = GetVariableString(rightPart);
+                    if (rightVarVal != rightPart)
+                    {
+                        if (int.TryParse(rightVarVal, out int rVal)) rightNumericVal = rVal;
+                    }
+                }
 
-    // 如果没有找到比较操作符，视为表达式求值（非0即真）
-    int val = EvaluateExpression(cond);
-    return val != 0;
-}
+                // --- 执行比较 ---
+                if (leftNumericVal.HasValue && rightNumericVal.HasValue)
+                {
+                    int l = leftNumericVal.Value;
+                    int r = rightNumericVal.Value;
+                    switch (foundOp)
+                    {
+                        case "<": return l < r;
+                        case ">": return l > r;
+                        case "<=": return l <= r;
+                        case ">=": return l >= r;
+                        case "==": return l == r;
+                        case "!=": return l != r;
+                    }
+                }
+                else
+                {
+                    // 非数字比较（字符串比较）
+                    // 注意：这里直接用 leftPart 和 rightPart 比较，或者用解析后的值
+                    // 为了保险，如果解析失败，我们回退到原始字符串比较
+                    string lStr = leftResolved ?? (leftNumericVal.HasValue ? leftNumericVal.Value.ToString() : leftPart);
+                    string rStr = rightResolved ?? (rightNumericVal.HasValue ? rightNumericVal.Value.ToString() : rightPart);
+
+                    switch (foundOp)
+                    {
+                        case "==": return lStr == rStr;
+                        case "!=": return lStr != rStr;
+                        default:
+                            ReportWarning($"Q23:NonNumericComparison Op='{foundOp}' Left='{lStr}' Right='{rStr}'");
+                            return false;
+                    }
+                }
+            }
+
+            // 如果没有找到比较操作符，视为表达式求值（非0即真）
+            int val = EvaluateExpression(cond);
+            return val != 0;
+        }
 
         private bool CheckCondition(string condition)
         {
             if (string.IsNullOrEmpty(condition)) return false;
-            
+
             if (condition.Contains(",A,"))
             {
                 var parts = condition.Split(new string[] { ",A," }, 2, StringSplitOptions.None);
@@ -909,15 +986,15 @@ private bool EvaluateSimpleCondition(string cond)
         }
 
         // --- REVISED ROBUST PARSER ---
-        
+
         private class Statement { }
-        
-        private class CodeStatement : Statement 
-        { 
-            public string Line { get; set; } 
+
+        private class CodeStatement : Statement
+        {
+            public string Line { get; set; }
             public int LineNumber { get; set; } // Store original line number
         }
-        
+
         private class IfStatement : Statement
         {
             public string Condition { get; set; }
@@ -925,10 +1002,10 @@ private bool EvaluateSimpleCondition(string cond)
             public List<Statement> TrueBody { get; set; }
             public IfStatement ElseChain { get; set; }
             public int LineNumber { get; set; }
-            
+
             public IfStatement() { TrueBody = new List<Statement>(); CycleCount = 1; }
         }
-        
+
         private class CycleStatement : Statement
         {
             public int Count { get; set; }
@@ -959,7 +1036,7 @@ private bool EvaluateSimpleCondition(string cond)
                     index++;
                     break;
                 }
-                
+
                 if (stopAtElseOrEndBrace)
                 {
                     if (line.StartsWith("Else:") || line.StartsWith("Else if"))
@@ -975,7 +1052,7 @@ private bool EvaluateSimpleCondition(string cond)
                     IfStatement ifStmt = new IfStatement();
                     ifStmt.LineNumber = currentLineNum;
                     ifStmt.Condition = ifMatch.Groups[1].Value.Trim();
-                    
+
                     if (!string.IsNullOrEmpty(ifMatch.Groups[2].Value))
                     {
                         int tempCycle;
@@ -985,9 +1062,9 @@ private bool EvaluateSimpleCondition(string cond)
                         }
                     }
 
-                    index++; 
+                    index++;
                     ifStmt.TrueBody = ParseStatements(lines, ref index, true);
-                    
+
                     if (index < lines.Count)
                     {
                         string nextLine = lines[index].Trim();
@@ -999,7 +1076,7 @@ private bool EvaluateSimpleCondition(string cond)
                                 IfStatement elseIfStmt = new IfStatement();
                                 elseIfStmt.LineNumber = index + 1;
                                 elseIfStmt.Condition = elseIfMatch.Groups[1].Value.Trim();
-                                
+
                                 if (!string.IsNullOrEmpty(elseIfMatch.Groups[2].Value))
                                 {
                                     int tempCycle;
@@ -1008,33 +1085,35 @@ private bool EvaluateSimpleCondition(string cond)
                                         elseIfStmt.CycleCount = tempCycle;
                                     }
                                 }
-                                
-                                index++; 
+
+                                index++;
                                 elseIfStmt.TrueBody = ParseStatements(lines, ref index, true);
-                                 
+
                                 if (index < lines.Count)
                                 {
-                                     string subsequentLine = lines[index].Trim();
-                                     if (subsequentLine.StartsWith("Else:"))
-                                     {
-                                         IfStatement pureElseStmt = new IfStatement();
-                                         pureElseStmt.LineNumber = index + 1;
-                                         pureElseStmt.Condition = "TRUE";
-                                         
-                                         Match elseCycleMatch = Regex.Match(subsequentLine, @"^Else:\s*cycle\s*\(\s*(\d+)\s*\)\s*\{:?\s*$");
-                                         if(elseCycleMatch.Success) {
-                                             int tempCycle;
-                                             if(int.TryParse(elseCycleMatch.Groups[1].Value, out tempCycle)) {
-                                                 pureElseStmt.CycleCount = tempCycle;
-                                             }
-                                         }
-                                         
-                                         index++; 
-                                         pureElseStmt.TrueBody = ParseStatements(lines, ref index, false);
-                                         elseIfStmt.ElseChain = pureElseStmt;
-                                     }
+                                    string subsequentLine = lines[index].Trim();
+                                    if (subsequentLine.StartsWith("Else:"))
+                                    {
+                                        IfStatement pureElseStmt = new IfStatement();
+                                        pureElseStmt.LineNumber = index + 1;
+                                        pureElseStmt.Condition = "TRUE";
+
+                                        Match elseCycleMatch = Regex.Match(subsequentLine, @"^Else:\s*cycle\s*\(\s*(\d+)\s*\)\s*\{:?\s*$");
+                                        if (elseCycleMatch.Success)
+                                        {
+                                            int tempCycle;
+                                            if (int.TryParse(elseCycleMatch.Groups[1].Value, out tempCycle))
+                                            {
+                                                pureElseStmt.CycleCount = tempCycle;
+                                            }
+                                        }
+
+                                        index++;
+                                        pureElseStmt.TrueBody = ParseStatements(lines, ref index, false);
+                                        elseIfStmt.ElseChain = pureElseStmt;
+                                    }
                                 }
-                                
+
                                 ifStmt.ElseChain = elseIfStmt;
                             }
                         }
@@ -1043,21 +1122,23 @@ private bool EvaluateSimpleCondition(string cond)
                             IfStatement elseStmt = new IfStatement();
                             elseStmt.LineNumber = index + 1;
                             elseStmt.Condition = "TRUE";
-                            
+
                             Match elseCycleMatch = Regex.Match(nextLine, @"^Else:\s*cycle\s*\(\s*(\d+)\s*\)\s*\{:?\s*$");
-                            if(elseCycleMatch.Success) {
+                            if (elseCycleMatch.Success)
+                            {
                                 int tempCycle;
-                                if(int.TryParse(elseCycleMatch.Groups[1].Value, out tempCycle)) {
+                                if (int.TryParse(elseCycleMatch.Groups[1].Value, out tempCycle))
+                                {
                                     elseStmt.CycleCount = tempCycle;
                                 }
                             }
-                            
-                            index++; 
+
+                            index++;
                             elseStmt.TrueBody = ParseStatements(lines, ref index, false);
                             ifStmt.ElseChain = elseStmt;
                         }
                     }
-                    
+
                     statements.Add(ifStmt);
                     continue;
                 }
@@ -1069,21 +1150,22 @@ private bool EvaluateSimpleCondition(string cond)
                     CycleStatement cycStmt = new CycleStatement();
                     cycStmt.LineNumber = currentLineNum;
                     int tempCount;
-                    if(int.TryParse(cycMatch.Groups[1].Value, out tempCount)) {
+                    if (int.TryParse(cycMatch.Groups[1].Value, out tempCount))
+                    {
                         cycStmt.Count = tempCount;
                     }
-                    
-                    index++; 
+
+                    index++;
                     cycStmt.Body = ParseStatements(lines, ref index, false);
                     statements.Add(cycStmt);
                     continue;
                 }
-                
+
                 // 3. Code Line
                 statements.Add(new CodeStatement { Line = rawLine, LineNumber = currentLineNum });
                 index++;
             }
-            
+
             return statements;
         }
 
@@ -1116,7 +1198,7 @@ private bool EvaluateSimpleCondition(string cond)
         private void ExecuteIfStatement(IfStatement ifStmt)
         {
             bool conditionMet = CheckCondition(ifStmt.Condition);
-            
+
             if (DebugMode) Console.WriteLine($"");
 
             if (conditionMet)
@@ -1136,12 +1218,12 @@ private bool EvaluateSimpleCondition(string cond)
                 }
             }
         }
-        
+
         private void ExecuteCycleStatement(CycleStatement cycStmt)
         {
             for (int i = 0; i < cycStmt.Count; i++)
             {
-                if (DebugMode) Console.WriteLine($"[Cycle] Iteration {i+1}/{cycStmt.Count}");
+                if (DebugMode) Console.WriteLine($"[Cycle] Iteration {i + 1}/{cycStmt.Count}");
                 ExecuteStatements(cycStmt.Body);
             }
         }
@@ -1152,12 +1234,12 @@ private bool EvaluateSimpleCondition(string cond)
         {
             // content is inside [ ... ]
             var list = new QuernList { Name = name };
-            
+
             // Simple split by comma, handling quotes
             List<string> items = new List<string>();
             string currentToken = "";
             bool inQuotes = false;
-            
+
             for (int i = 0; i < content.Length; i++)
             {
                 char c = content[i];
@@ -1228,6 +1310,13 @@ private bool EvaluateSimpleCondition(string cond)
         {
             string trimmed = line.Trim();
             if (string.IsNullOrEmpty(trimmed)) return;
+            if (!_isExecutingViaApi)
+            {
+                if (ModManager.ProcessSyntax(trimmed, this))
+                {
+                    return;
+                }
+            }
 
             if (ModManager.ProcessSyntax(trimmed, this))
             {
@@ -1277,7 +1366,7 @@ private bool EvaluateSimpleCondition(string cond)
             {
                 string name = listDelMatch.Groups[1].Value;
                 int index = int.Parse(listDelMatch.Groups[2].Value);
-                
+
                 var list = GetList(name);
                 if (list != null && index >= 0 && index < list.Items.Count)
                 {
@@ -1312,7 +1401,7 @@ private bool EvaluateSimpleCondition(string cond)
             }
 
             // --- Enhanced Set Logic ---
-            
+
             // Pattern 1: Compound Assignment (e.g., Set "Var" += 1)
             // Matches: Set "Name" OP Value
             Match compoundSetMatch = Regex.Match(trimmed, @"^Set\s+""([^""]+)""\s*(\+|-|\*|/|//|%)=\s*(.+)$");
@@ -1321,7 +1410,7 @@ private bool EvaluateSimpleCondition(string cond)
                 string varName = compoundSetMatch.Groups[1].Value;
                 string op = compoundSetMatch.Groups[2].Value;
                 string valRaw = compoundSetMatch.Groups[3].Value.Trim();
-                
+
                 Variable currentVar = FindVariable(varName);
                 if (currentVar == null)
                 {
@@ -1331,27 +1420,27 @@ private bool EvaluateSimpleCondition(string cond)
 
                 int currentVal = GetVariableNumber(varName);
                 int rightVal = EvaluateExpression(valRaw); // Evaluate expression including L+ refs
-                
+
                 int result = 0;
                 switch (op)
                 {
                     case "+": result = currentVal + rightVal; break;
                     case "-": result = currentVal - rightVal; break;
                     case "*": result = currentVal * rightVal; break;
-                    case "/": 
+                    case "/":
                         if (rightVal == 0) { ReportWarning("DivisionByZeroWarning"); result = 0; }
-                        else result = currentVal / rightVal; 
+                        else result = currentVal / rightVal;
                         break;
-                    case "//": 
+                    case "//":
                         if (rightVal == 0) { ReportWarning("DivisionByZeroWarning"); result = 0; }
-                        else result = currentVal / rightVal; 
+                        else result = currentVal / rightVal;
                         break;
-                    case "%": 
+                    case "%":
                         if (rightVal == 0) { ReportWarning("DivisionByZeroWarning"); result = 0; }
-                        else result = currentVal % rightVal; 
+                        else result = currentVal % rightVal;
                         break;
                 }
-                
+
                 // Update variable as Number
                 SetVariable(varName, "Number", result.ToString());
                 return;
@@ -1384,7 +1473,7 @@ private bool EvaluateSimpleCondition(string cond)
                     {
                         effectiveType = "Number"; // Assume number if expression or bare word
                     }
-                    
+
                     // If variable already exists, preserve its type unless explicitly overridden?
                     // For simplicity, if type is omitted, we update the value keeping existing type if possible, 
                     // or use inferred type if new.
@@ -1396,7 +1485,7 @@ private bool EvaluateSimpleCondition(string cond)
                 }
 
                 string finalValue = "";
-                
+
                 if (effectiveType == "String")
                 {
                     // If it's a string assignment, we expect quotes.
@@ -1445,12 +1534,12 @@ private bool EvaluateSimpleCondition(string cond)
                 if (startParen >= 0 && endParen > startParen)
                 {
                     string inner = relevantPart.Substring(startParen + 1, endParen - startParen - 1).Trim();
-                    
+
                     // Check for List Print Syntax: L+Name+Index
                     if (inner.StartsWith("L+"))
                     {
                         string resolved = ResolveComplexReference(inner);
-                        if (resolved != null) 
+                        if (resolved != null)
                         {
                             contentToPrint = resolved;
                         }
@@ -1468,10 +1557,10 @@ private bool EvaluateSimpleCondition(string cond)
                     {
                         Variable v = FindVariable(inner);
                         if (v != null) contentToPrint = GetVariableString(inner);
-                        else 
+                        else
                         {
                             // Could be a literal number or undefined variable
-                            if(int.TryParse(inner, out int litNum)) contentToPrint = inner;
+                            if (int.TryParse(inner, out int litNum)) contentToPrint = inner;
                             else ReportWarning($"Q24:UndefinedVariableInPrint Var='{inner}'");
                             contentToPrint = inner;
                         }
@@ -1486,7 +1575,7 @@ private bool EvaluateSimpleCondition(string cond)
             }
             else if (trimmed.StartsWith("Return "))
             {
-                 if (DebugMode) Console.WriteLine($"[Return] {trimmed.Substring(7).Trim()}");
+                if (DebugMode) Console.WriteLine($"[Return] {trimmed.Substring(7).Trim()}");
             }
             else
             {
@@ -1506,12 +1595,12 @@ private bool EvaluateSimpleCondition(string cond)
                             if (DebugMode) Console.WriteLine($"Calling function: {funcName}");
                             MarkFunctionUsed(funcName);
                             _callStack.Push(funcName);
-                            
+
                             var funcLines = Regex.Split(func.Body, @"\r\n|\n").ToList();
                             int idx = 0;
                             var stmts = ParseStatements(funcLines, ref idx, false);
                             ExecuteStatements(stmts);
-                            
+
                             _callStack.Pop();
                         }
                     }
@@ -1534,7 +1623,7 @@ private bool EvaluateSimpleCondition(string cond)
             {
                 return raw.Substring(1, raw.Length - 2);
             }
-            
+
             // Check for Complex References in values (e.g. Add 0 L+Other+1)
             if (raw.StartsWith("L+"))
             {
@@ -1554,7 +1643,7 @@ private bool EvaluateSimpleCondition(string cond)
         public void ExecuteFunctionBody(string body)
         {
             if (string.IsNullOrEmpty(body)) return;
-            
+
             // Pre-process to handle multi-line List definitions AND Comments
             string processedBody = PreProcessCode(body);
 
@@ -1591,7 +1680,7 @@ private bool EvaluateSimpleCondition(string cond)
                         // Note: If there is code after ### on the same line, it would need more complex parsing.
                         // For simplicity, we assume ### ends the comment block.
                         inMultiLineComment = false;
-                        
+
                         // Check if there is content after the closing ###
                         int endIdx = trimmed.IndexOf("###");
                         if (endIdx + 3 < trimmed.Length)
@@ -1686,7 +1775,7 @@ private bool EvaluateSimpleCondition(string cond)
             // Regex to find Include "filename.q"
             // We process includes recursively.
             var includeRegex = new Regex(@"^Include\s+""([^""]+)""\s*$", RegexOptions.Multiline);
-            
+
             // We need to loop because replacing text changes indices/structure, 
             // but simpler is to split by lines and process.
             // However, regex replace is easier if we do it carefully.
@@ -1696,7 +1785,7 @@ private bool EvaluateSimpleCondition(string cond)
             {
                 string fileName = match.Groups[1].Value;
                 string fullPath = Path.Combine(baseDirectory, fileName);
-                
+
                 // Normalize path to prevent duplicates via different paths (e.g. ./a.q vs a.q)
                 string normalizedPath = Path.GetFullPath(fullPath);
 
@@ -1714,7 +1803,7 @@ private bool EvaluateSimpleCondition(string cond)
 
                 includedFiles.Add(normalizedPath);
                 string content = File.ReadAllText(fullPath);
-                
+
                 // Recursively resolve includes in the included file
                 // The base directory for the included file should be its own directory
                 string subDir = Path.GetDirectoryName(fullPath);
@@ -1727,7 +1816,7 @@ private bool EvaluateSimpleCondition(string cond)
         public int ParseAndExecuteCode(string codeContent, string sourceFile = "Unknown")
         {
             _currentSourceFile = sourceFile;
-            
+
             // Reset state
             foreach (var v in _variables) v.Used = false;
             foreach (var f in _functions) f.UsedInExecution = false;
@@ -1743,14 +1832,14 @@ private bool EvaluateSimpleCondition(string cond)
             HashSet<string> includedFiles = new HashSet<string>();
             // Add the main file to the set so it doesn't include itself if referenced relatively
             includedFiles.Add(Path.GetFullPath(sourceFile));
-            
+
             string expandedCode = ResolveIncludedCode(codeContent, baseDirectory, includedFiles);
 
             // 2. Handle Imports (Scan for Import statements)
             // Import "file.js"
             var importRegex = new Regex(@"^Import\s+""([^""]+)""\s*$", RegexOptions.Multiline);
             var importMatches = importRegex.Matches(expandedCode);
-            
+
             foreach (Match match in importMatches)
             {
                 string jsFile = match.Groups[1].Value;
@@ -1769,8 +1858,8 @@ private bool EvaluateSimpleCondition(string cond)
                 // Usually relative to script is better for portability, but let's check script dir/mods first.
                 if (!Directory.Exists(modsDir))
                 {
-                     // Fallback to exe directory mods folder if script dir doesn't have it
-                     modsDir = Path.Combine(Directory.GetCurrentDirectory(), "mods");
+                    // Fallback to exe directory mods folder if script dir doesn't have it
+                    modsDir = Path.Combine(Directory.GetCurrentDirectory(), "mods");
                 }
 
                 foreach (var jsFile in _requestedJsImports.Distinct())
@@ -1786,9 +1875,9 @@ private bool EvaluateSimpleCondition(string cond)
 
             if (matches.Count == 0 && !string.IsNullOrEmpty(cleanCode.Trim()))
             {
-                 // If there is code but no functions defined at all
-                 ReportError("Q14:NoFunctionsDefined");
-                 return -1;
+                // If there is code but no functions defined at all
+                ReportError("Q14:NoFunctionsDefined");
+                return -1;
             }
 
             foreach (Match match in matches)
@@ -1796,7 +1885,7 @@ private bool EvaluateSimpleCondition(string cond)
                 string name = match.Groups[1].Value;
                 string paramsStr = match.Groups[2].Value;
                 string body = match.Groups[3].Value;
-                
+
                 bool isMain = paramsStr.Contains("MainFn");
                 AddFunction(name, body, isMain);
             }
@@ -1807,9 +1896,9 @@ private bool EvaluateSimpleCondition(string cond)
                 if (DebugMode) Console.WriteLine($"Main function: {mainFunc.Name}");
                 MarkFunctionUsed(mainFunc.Name);
                 _callStack.Push(mainFunc.Name);
-                
+
                 ExecuteFunctionBody(mainFunc.Body);
-                
+
                 _callStack.Pop();
 
                 if (DebugMode)
@@ -1866,7 +1955,7 @@ private bool EvaluateSimpleCondition(string cond)
             ModManager modManager = new ModManager();
             QuernRuntime runtime = new QuernRuntime(modManager); // Pass modManager to runtime
             runtime.DebugMode = true;
-            
+
             // Note: We no longer load ALL mods automatically here.
             // Mods are loaded on-demand via Import statements in the script.
             // modManager.LoadAllMods("mods", runtime); 
@@ -1880,7 +1969,7 @@ private bool EvaluateSimpleCondition(string cond)
             {
                 Console.WriteLine($"Unknown command: {command}");
             }
-            
+
             modManager.UnloadAllMods();
         }
     }
