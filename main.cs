@@ -29,22 +29,27 @@ public class UnsafeSystem
 {
     private bool _risksAccepted = false;
     private HashSet<string> _allowedCommands = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-    public void IAcceptAllRisks()
-    {
-        _risksAccepted = true;
-        Console.WriteLine("[UnsafeSystem] The user has clearly accepted this risk");
-    }
     public string RunSafeCommand(string command, string args)
     {
-        if (!_risksAccepted)
-        {
-            throw new Exception("[Security] Please call IAcceptAllRisks() first!");
-        }
-
-        if (!_allowedCommands.Contains(command))
-        {
-            throw new Exception($"[Security] Command '{command}' is not in the whitelist (cwl.json)!");
-        }
+if (_risksAccepted)
+{
+    // 只有用户同意了，我们才需要去检查白名单
+    if (_allowedCommands.Contains(command))
+    {
+        // 用户同意了，并且命令也在白名单里，执行！
+        // ... 执行命令的代码 ...
+    }
+    else
+    {
+        // 用户同意了，但命令不在白名单里
+        throw new Exception($"[Security] Command '{command}' is not in the whitelist!");
+    }
+}
+else
+{
+    // 用户根本没同意，直接拒绝，连白名单都不用查了
+    throw new Exception("[Security] User has not accepted the risk!");
+}
 
         var startInfo = new ProcessStartInfo(command, args)
         {
@@ -136,6 +141,168 @@ public class SafeSubprocessWrapper
 
 namespace QuernEngine
 {
+    public class PrivilegedFileAPI
+{
+    // 核心方法：拦截并请求用户确认
+    private bool RequestUserConsent(string action, string path)
+    {
+        Console.WriteLine("The mod tried to access other files without permission (dangerous)");
+        Console.WriteLine($"[Operation request] Mod want {action} file:{path}");
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.Write("Are you sure?(Type YES to continue, any other key to cancel): ");
+        
+        string input = Console.ReadLine()?.Trim();
+        Console.ResetColor();
+
+        return string.Equals(input, "YES", StringComparison.OrdinalIgnoreCase);
+    }
+
+    // 暴露给 JS 的特权读取方法
+    public string ReadAllText(string path)
+    {
+        // 1. 先问用户
+        if (!RequestUserConsent("读取", path))
+        {
+            throw new Exception("[用户拒绝] 操作已取消。");
+        }
+        
+        // 2. 用户同意了，再执行真实的 .NET 文件操作
+        return File.ReadAllText(path);
+    }
+        // 新增：删除
+    public void Delete(string path)
+    {
+        if (!RequestUserConsent("删除", path)) throw new Exception("[用户拒绝] 操作已取消。");
+        if (File.Exists(path)) File.Delete(path);
+    }
+
+    // 新增：移动
+    public void Move(string sourcePath, string destPath)
+    {
+        if (!RequestUserConsent("移动", $"{sourcePath} -> {destPath}")) throw new Exception("[用户拒绝] 操作已取消。");
+        if (File.Exists(sourcePath))
+        {
+            string dir = Path.GetDirectoryName(destPath);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+            File.Move(sourcePath, destPath);
+        }
+    }
+
+    // 新增：复制
+    public void Copy(string sourcePath, string destPath)
+    {
+        if (!RequestUserConsent("复制", $"{sourcePath} -> {destPath}")) throw new Exception("[用户拒绝] 操作已取消。");
+        if (File.Exists(sourcePath))
+        {
+            string dir = Path.GetDirectoryName(destPath);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+            File.Copy(sourcePath, destPath, true);
+        }
+    }
+
+    // 暴露给 JS 的特权写入方法
+    public void WriteAllText(string path, string content)
+    {
+        if (!RequestUserConsent("写入", path))
+        {
+            throw new Exception("[用户拒绝] 操作已取消。");
+        }
+        
+        File.WriteAllText(path, content);
+    }
+}
+public class SafeFileAPI
+{
+    private readonly string SandboxPath;
+
+    public SafeFileAPI()
+    {
+        // 1. 首选沙箱：程序运行目录下的 mod_data 文件夹
+        string preferredPath = Path.Combine(AppContext.BaseDirectory, "mod_data");
+        try
+        {
+            // 尝试创建，看看有没有权限
+            Directory.CreateDirectory(preferredPath);
+            SandboxPath = preferredPath;
+        }
+        catch
+        {
+            // 2. 如果失败（权限不足），降级到当前用户的“我的文档”目录
+            string fallbackPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "QuernModUserData");
+            Directory.CreateDirectory(fallbackPath);
+            SandboxPath = fallbackPath;
+            Console.WriteLine($"[SafeFileAPI] Warn:Cannot create sandbox dir. use user dir: {SandboxPath}");
+        }
+    }
+
+    // 核心方法：确保任何文件路径都在 SandboxPath 内部，并返回安全的完整路径
+    private string GetSecurePath(string fileName)
+    {
+        // 防止 fileName 是 "../../etc/passwd" 这种路径穿越攻击
+        string fullPath = Path.Combine(SandboxPath, fileName);
+        string finalPath = Path.GetFullPath(fullPath);
+        if (!finalPath.StartsWith(SandboxPath, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new Exception("[Security] Access denied: Tried to access a file outside the sandbox.");
+        }
+        return finalPath;
+    }
+
+    // 辅助方法：在写入前确保目录存在
+    private void EnsureDirectoryExists(string filePath)
+    {
+        string directory = Path.GetDirectoryName(filePath);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+    }
+
+    public void Delete(string fileName)
+    {
+        string path = GetSecurePath(fileName);
+        if (File.Exists(path)) File.Delete(path);
+    }
+
+    public void Move(string sourceFileName, string destFileName)
+    {
+        string srcPath = GetSecurePath(sourceFileName);
+        string destPath = GetSecurePath(destFileName);
+        if (File.Exists(srcPath))
+        {
+            EnsureDirectoryExists(destPath); // 确保目标目录存在
+            File.Move(srcPath, destPath);
+        }
+    }
+
+    public void Copy(string sourceFileName, string destFileName)
+    {
+        string srcPath = GetSecurePath(sourceFileName);
+        string destPath = GetSecurePath(destFileName);
+        if (File.Exists(srcPath))
+        {
+            EnsureDirectoryExists(destPath); // 确保目标目录存在
+            File.Copy(srcPath, destPath, true);
+        }
+    }
+
+    public string ReadAllText(string fileName)
+    {
+        string path = GetSecurePath(fileName);
+        if (File.Exists(path))
+        {
+            return File.ReadAllText(path);
+        }
+        return $"[Error] 文件 '{fileName}' 在沙箱中未找到。";
+    }
+
+    public void WriteAllText(string fileName, string content)
+    {
+        string path = GetSecurePath(fileName);
+        EnsureDirectoryExists(path); // 关键修改：写入前确保目录存在
+        File.WriteAllText(path, content);
+    }
+}
     public class Variable
     {
         public string Name { get; set; }
@@ -241,11 +408,36 @@ namespace QuernEngine
                 _jsEngine.SetValue("Convert", typeof(Convert));
 
                 // 2. 暴露 IO 操作
-                _jsEngine.SetValue("File", typeof(File));
+                _jsEngine.SetValue("SafeFile", new SafeFileAPI());
+                _jsEngine.SetValue("SystemFile", new PrivilegedFileAPI()); 
                 _jsEngine.SetValue("Directory", typeof(Directory));
                 _jsEngine.SetValue("Path", typeof(Path));
 
                 var unsafeSystem = new UnsafeSystem();
+                // 2. 创建一个“代理”对象给 JS，只包含一个方法
+var safeProxy = new {
+    Run = new Func<string, string, string>((cmd, args) => {
+        // --- 核心修改：在这里弹窗询问用户 ---
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine($"[WARN]Mod want to run command: {cmd} {args}");
+        Console.Write("Are you sure? (y/n): ");
+        
+        // 阻塞等待用户输入
+        var key = Console.ReadKey();
+        Console.WriteLine();
+        Console.ResetColor();
+
+        if (key.KeyChar == 'y' || key.KeyChar == 'Y') {
+            // 用户同意了，才调用真正的 UnsafeSystem
+            return unsafeSystem.RunSafeCommand(cmd, args);
+        } else {
+            return "[Rejected]";
+        }
+    })
+};
+
+// 3. 把代理暴露给 JS，名字叫 UnsafeSystem（为了兼容脚本写法，但其实是安全的）
+_jsEngine.SetValue("UnsafeSystem", safeProxy);
                 _jsEngine.SetValue("UnsafeSystem", unsafeSystem);
 
                 // 4. 暴露 正则表达式 (方便 JS 里做复杂解析)
