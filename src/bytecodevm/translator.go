@@ -23,13 +23,15 @@ type Program struct {
 	Imports []string
 	Nodes   []Node
 }
+
 func (p *Program) Type() string { return "Program" }
 
 type FunctionDef struct {
-	Name    string
-	Body    []Node
-	IsMain  bool // New field to mark main function
+	Name   string
+	Body   []Node
+	IsMain bool // New field to mark main function
 }
+
 func (f *FunctionDef) Type() string { return "FunctionDef" }
 
 type VarDef struct {
@@ -38,47 +40,70 @@ type VarDef struct {
 	IsPrivate bool
 	VarType   string
 }
+
 func (v *VarDef) Type() string { return "VarDef" }
 
 type ConsoleInfo struct {
 	Content string
 }
+
 func (c *ConsoleInfo) Type() string { return "ConsoleInfo" }
 
 type ClassDef struct {
 	Name    string
 	Members []Node
 }
+
 func (c *ClassDef) Type() string { return "ClassDef" }
 
 type TemplateUse struct {
 	ClassName string
 }
+
 func (t *TemplateUse) Type() string { return "TemplateUse" }
 
 type AliasDef struct {
 	Name  string
 	Value string
 }
+
 func (a *AliasDef) Type() string { return "AliasDef" }
 
 type LoopBlock struct {
 	Count string
 	Body  []Node
 }
+
 func (l *LoopBlock) Type() string { return "LoopBlock" }
 
 type IfBlock struct {
 	Condition string
 	Body      []Node
 }
+
 func (i *IfBlock) Type() string { return "IfBlock" }
 
 type CustomNode struct {
 	RawLine string
 	Keyword string
 }
+
 func (c *CustomNode) Type() string { return "CustomNode" }
+
+// New Data Structures
+type ListDef struct {
+	Name  string
+	Items []string
+}
+
+func (l *ListDef) Type() string { return "ListDef" }
+
+type DictDef struct {
+	Name   string
+	Pairs  map[string]string // Key -> Value
+}
+
+func (d *DictDef) Type() string { return "DictDef" }
 
 // --- Parser ---
 
@@ -107,7 +132,7 @@ func (p *Parser) Parse() (*Program, error) {
 		if err != nil {
 			return nil, fmt.Errorf("Line %d: %v", p.pos+1, err)
 		}
-		
+
 		if node != nil {
 			prog.Nodes = append(prog.Nodes, node)
 		}
@@ -143,14 +168,14 @@ func (p *Parser) parseFunction(line string) (*FunctionDef, error) {
 	// Extract name and check for (Main)
 	// Example: Function "MyFunc"(Main) { ...
 	// Example: Function "MyFunc" { ...
-	
+
 	name := ""
 	isMain := false
-	
+
 	// Remove "Function" prefix
 	rest := strings.TrimPrefix(line, "Function")
 	rest = strings.TrimSpace(rest)
-	
+
 	// Find the name part (usually quoted)
 	if strings.HasPrefix(rest, "\"") {
 		endQuote := strings.Index(rest[1:], "\"")
@@ -158,7 +183,7 @@ func (p *Parser) parseFunction(line string) (*FunctionDef, error) {
 			name = rest[1 : endQuote+1]
 			rest = rest[endQuote+2:] // Move past the closing quote
 			rest = strings.TrimSpace(rest)
-			
+
 			// Check for (Main)
 			if strings.HasPrefix(rest, "(Main)") {
 				isMain = true
@@ -175,7 +200,7 @@ func (p *Parser) parseFunction(line string) (*FunctionDef, error) {
 			}
 		}
 	}
-	
+
 	if name == "" {
 		// Fallback to old logic if parsing fails
 		parts := strings.Fields(line)
@@ -198,7 +223,7 @@ func (p *Parser) parseClass(line string) (*ClassDef, error) {
 		return nil, fmt.Errorf("Invalid class definition")
 	}
 	name := strings.Trim(parts[1], "\"")
-	
+
 	body, err := p.parseBlock()
 	if err != nil {
 		return nil, err
@@ -209,7 +234,7 @@ func (p *Parser) parseClass(line string) (*ClassDef, error) {
 // parseBlock handles the content inside {}.
 func (p *Parser) parseBlock() ([]Node, error) {
 	var nodes []Node
-	
+
 	currentLine := p.lines[p.pos]
 	if !strings.Contains(currentLine, "{") {
 		p.pos++
@@ -225,12 +250,12 @@ func (p *Parser) parseBlock() ([]Node, error) {
 
 	for p.pos < len(p.lines) {
 		line := strings.TrimSpace(p.lines[p.pos])
-		
+
 		if line == "}" {
 			p.pos++
 			return nodes, nil
 		}
-		
+
 		if line == "" || strings.HasPrefix(line, "//") {
 			p.pos++
 			continue
@@ -244,7 +269,7 @@ func (p *Parser) parseBlock() ([]Node, error) {
 		if node != nil {
 			nodes = append(nodes, node)
 		}
-		
+
 		if p.pos == posBeforeStmt {
 			p.pos++
 		}
@@ -256,31 +281,34 @@ func (p *Parser) parseStatement(line string) (Node, error) {
 	if strings.HasPrefix(line, "Data.Var") {
 		return p.parseVarDef(line)
 	}
-	
+
 	if strings.HasPrefix(line, "Console.Info") {
 		return p.parseConsoleInfo(line)
 	}
-	
+
 	if strings.HasPrefix(line, "Template") {
 		parts := strings.Fields(line)
 		if len(parts) >= 2 {
 			return &TemplateUse{ClassName: strings.Trim(parts[1], "\"")}, nil
 		}
 	}
-	
+
 	if strings.HasPrefix(line, "Alias") {
 		return p.parseAlias(line)
 	}
-	
+
 	if strings.HasPrefix(line, "DataStruct.List") {
-		fmt.Println("[Warn] DataStruct.List not fully implemented.")
-		return nil, nil
+		return p.parseList(line)
+	}
+
+	if strings.HasPrefix(line, "DataStruct.Dict") {
+		return p.parseDict(line)
 	}
 
 	if strings.HasPrefix(line, "Loop") {
 		return p.parseLoop(line)
 	}
-	
+
 	if strings.HasPrefix(line, "If") {
 		return p.parseIf(line)
 	}
@@ -309,35 +337,35 @@ func (p *Parser) parseVarDef(line string) (*VarDef, error) {
 	if len(parts) < 4 {
 		return nil, fmt.Errorf("Invalid VarDef: %s", line)
 	}
-	
+
 	idx := 1
 	isPrivate := false
 	varType := "Any"
-	
+
 	if parts[idx] == "Private" {
 		isPrivate = true
 		idx++
 	}
-	
+
 	if idx < len(parts) && (parts[idx] == "Int" || parts[idx] == "String" || parts[idx] == "Bool") {
 		varType = parts[idx]
 		idx++
 	}
-	
+
 	if idx >= len(parts) {
 		return nil, fmt.Errorf("Missing variable name")
 	}
 	name := parts[idx]
 	idx++
-	
+
 	if idx >= len(parts) || parts[idx] != "=" {
 		return nil, fmt.Errorf("Expected '='")
 	}
 	idx++
-	
+
 	value := strings.Join(parts[idx:], " ")
 	value = strings.Trim(value, "\"")
-	
+
 	return &VarDef{Name: name, Value: value, IsPrivate: isPrivate, VarType: varType}, nil
 }
 
@@ -362,6 +390,93 @@ func (p *Parser) parseAlias(line string) (*AliasDef, error) {
 	return &AliasDef{Name: name, Value: value}, nil
 }
 
+func (p *Parser) parseList(line string) (*ListDef, error) {
+	// Expected format: DataStruct.List "Name" = [item1, item2, ...]
+	// Or simple: DataStruct.List "Name" = item1
+	
+	parts := strings.Fields(line)
+	if len(parts) < 4 {
+		return nil, fmt.Errorf("Invalid List definition: %s", line)
+	}
+
+	// parts[0] is DataStruct.List
+	name := strings.Trim(parts[1], "\"")
+	
+	// parts[2] should be =
+	if parts[2] != "=" {
+		return nil, fmt.Errorf("Expected '=' in List definition")
+	}
+
+	// Rest is the value
+	valuePart := strings.Join(parts[3:], " ")
+	items := make([]string, 0)
+
+	// Check if it's a bracketed list [...]
+	if strings.HasPrefix(valuePart, "[") && strings.HasSuffix(valuePart, "]") {
+		inner := strings.Trim(valuePart, "[]")
+		if inner != "" {
+			splitItems := strings.Split(inner, ",")
+			for _, item := range splitItems {
+				item = strings.TrimSpace(item)
+				item = strings.Trim(item, "\"")
+				if item != "" {
+					items = append(items, item)
+				}
+			}
+		}
+	} else {
+		// Single item
+		val := strings.Trim(valuePart, "\"")
+		if val != "" {
+			items = append(items, val)
+		}
+	}
+
+	return &ListDef{Name: name, Items: items}, nil
+}
+
+func (p *Parser) parseDict(line string) (*DictDef, error) {
+	// Expected format: DataStruct.Dict "Name" = {"key1": "val1", "key2": "val2"}
+	
+	parts := strings.Fields(line)
+	if len(parts) < 4 {
+		return nil, fmt.Errorf("Invalid Dict definition: %s", line)
+	}
+
+	name := strings.Trim(parts[1], "\"")
+	
+	if parts[2] != "=" {
+		return nil, fmt.Errorf("Expected '=' in Dict definition")
+	}
+
+	valuePart := strings.Join(parts[3:], " ")
+	pairs := make(map[string]string)
+
+	if strings.HasPrefix(valuePart, "{") && strings.HasSuffix(valuePart, "}") {
+		inner := strings.Trim(valuePart, "{}")
+		if inner != "" {
+			// Simple split by comma, assuming no nested structures for now
+			kvPairs := strings.Split(inner, ",")
+			for _, kv := range kvPairs {
+				kv = strings.TrimSpace(kv)
+				// Split by colon
+				colonIdx := strings.Index(kv, ":")
+				if colonIdx != -1 {
+					k := strings.TrimSpace(kv[:colonIdx])
+					v := strings.TrimSpace(kv[colonIdx+1:])
+					k = strings.Trim(k, "\"")
+					v = strings.Trim(v, "\"")
+					if k != "" {
+						pairs[k] = v
+					}
+				}
+			}
+		}
+	}
+
+	return &DictDef{Name: name, Pairs: pairs}, nil
+}
+
 func (p *Parser) parseLoop(line string) (*LoopBlock, error) {
 	start := strings.Index(line, "(")
 	end := strings.Index(line, ")")
@@ -369,7 +484,7 @@ func (p *Parser) parseLoop(line string) (*LoopBlock, error) {
 		return nil, fmt.Errorf("Invalid Loop syntax")
 	}
 	count := strings.TrimSpace(line[start+1 : end])
-	
+
 	body, err := p.parseBlock()
 	if err != nil {
 		return nil, err
@@ -384,7 +499,7 @@ func (p *Parser) parseIf(line string) (*IfBlock, error) {
 		return nil, fmt.Errorf("Invalid If syntax")
 	}
 	cond := strings.TrimSpace(line[start+1 : end])
-	
+
 	body, err := p.parseBlock()
 	if err != nil {
 		return nil, err
@@ -414,7 +529,7 @@ func NewModLoader() *ModLoader {
 func (ml *ModLoader) injectAPIs() {
 	vm := ml.vm
 	quernObj := vm.NewObject()
-	
+
 	quernObj.Set("Log", func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) > 0 {
 			msg := call.Argument(0).String()
@@ -427,10 +542,10 @@ func (ml *ModLoader) injectAPIs() {
 		if len(call.Arguments) < 2 {
 			return goja.Undefined()
 		}
-		
+
 		keyword := call.Argument(0).String()
 		handlerVal := call.Argument(1)
-		
+
 		if handlerVal.ExportType().Kind() != reflect.Func {
 			fmt.Printf("[Warn] Quern.Reg: Second argument for '%s' is not a function\n", keyword)
 			return goja.Undefined()
@@ -442,15 +557,15 @@ func (ml *ModLoader) injectAPIs() {
 			if !ok {
 				return "", fmt.Errorf("Handler for '%s' is not a function", keyword)
 			}
-			
+
 			resultVal, err := callable(goja.Undefined(), jsInput)
 			if err != nil {
 				return "", fmt.Errorf("JS handler error for '%s': %v", keyword, err)
 			}
-			
+
 			return resultVal.String(), nil
 		}
-		
+
 		ml.handlers[keyword] = goHandler
 		fmt.Printf("[Mod] Registered syntax handler for: %s\n", keyword)
 		return goja.Undefined()
@@ -461,7 +576,7 @@ func (ml *ModLoader) injectAPIs() {
 
 func (ml *ModLoader) LoadModsFromDirectory(modDir string) error {
 	if _, err := os.Stat(modDir); os.IsNotExist(err) {
-		return nil 
+		return nil
 	}
 
 	files, err := ioutil.ReadDir(modDir)
@@ -473,16 +588,16 @@ func (ml *ModLoader) LoadModsFromDirectory(modDir string) error {
 		if !strings.HasSuffix(f.Name(), ".js") {
 			continue
 		}
-		
+
 		fullPath := filepath.Join(modDir, f.Name())
 		fmt.Printf("[Info] Processing mod: %s\n", f.Name())
-		
+
 		content, err := ioutil.ReadFile(fullPath)
 		if err != nil {
 			fmt.Printf("[Error] Failed to read %s: %v\n", f.Name(), err)
 			continue
 		}
-		
+
 		visited := make(map[string]bool)
 		visited[fullPath] = true
 		mergedCode, err := ProcessIncludes(modDir, string(content), visited)
@@ -490,14 +605,14 @@ func (ml *ModLoader) LoadModsFromDirectory(modDir string) error {
 			fmt.Printf("[Error] Failed to process includes for %s: %v\n", f.Name(), err)
 			continue
 		}
-		
+
 		_, err = ml.vm.RunString(mergedCode)
 		if err != nil {
 			fmt.Printf("[Error] Failed to execute mod %s: %v\n", f.Name(), err)
 			continue
 		}
 	}
-	
+
 	return nil
 }
 
@@ -508,52 +623,52 @@ func (ml *ModLoader) GetHandler(keyword string) (SyntaxHandler, bool) {
 
 func ProcessIncludes(baseDir string, content string, visited map[string]bool) (string, error) {
 	re := regexp.MustCompile(`Include\s+["']([^"']+)["'];?`)
-	
+
 	var result strings.Builder
 	lastIndex := 0
-	
+
 	for _, match := range re.FindAllStringSubmatchIndex(content, -1) {
 		result.WriteString(content[lastIndex:match[0]])
-		
+
 		pathStart := match[2]
 		pathEnd := match[3]
 		includePath := content[pathStart:pathEnd]
-		
+
 		absPath := filepath.Join(baseDir, includePath)
 		absPath, err := filepath.Abs(absPath)
 		if err != nil {
 			return "", fmt.Errorf("invalid include path: %s", includePath)
 		}
-		
+
 		cleanBase, _ := filepath.Abs(baseDir)
 		if !strings.HasPrefix(absPath, cleanBase) {
 			return "", fmt.Errorf("security violation: include path escapes base directory: %s", includePath)
 		}
-		
+
 		if visited[absPath] {
 			fmt.Printf("[Warn] Circular include detected: %s, skipping.\n", absPath)
 			lastIndex = match[1]
 			continue
 		}
 		visited[absPath] = true
-		
+
 		subContent, err := ioutil.ReadFile(absPath)
 		if err != nil {
 			return "", fmt.Errorf("failed to read included file %s: %v", absPath, err)
 		}
-		
+
 		subDir := filepath.Dir(absPath)
 		processedSub, err := ProcessIncludes(subDir, string(subContent), visited)
 		if err != nil {
 			return "", err
 		}
-		
+
 		result.WriteString(processedSub)
 		lastIndex = match[1]
 	}
-	
+
 	result.WriteString(content[lastIndex:])
-	
+
 	return result.String(), nil
 }
 
@@ -595,19 +710,19 @@ func (t *Translator) Translate(prog *Program) string {
 			t.emit(fmt.Sprintf("fnc %s {", fn.Name))
 			t.translateBody(fn.Body, make(map[string]string))
 			t.emit("}")
-			
+
 			// Check if this is the main function
 			if fn.IsMain {
 				t.MainFuncName = fn.Name
 			}
 		}
 	}
-	
+
 	// Append call to main function if found
 	if t.MainFuncName != "" {
 		t.emit(fmt.Sprintf("cal %s", t.MainFuncName))
 	}
-	
+
 	return strings.Join(t.Instructions, "\n")
 }
 
@@ -629,7 +744,41 @@ func (t *Translator) translateBody(nodes []Node, localAliases map[string]string)
 				val = v
 			}
 			t.emit(fmt.Sprintf("psh %s %s", n.Name, val))
+
+		case *ListDef:
+			// Implement List as individual variables: Name_0, Name_1... and Name_len
+			t.emit(fmt.Sprintf("crt %s_len", n.Name))
+			t.emit(fmt.Sprintf("psh %s_len %d", n.Name, len(n.Items)))
 			
+			for i, item := range n.Items {
+				varName := fmt.Sprintf("%s_%d", n.Name, i)
+				t.emit(fmt.Sprintf("crt %s", varName))
+				
+				val := item
+				if v, ok := allAliases[item]; ok {
+					val = v
+				}
+				t.emit(fmt.Sprintf("psh %s %s", varName, val))
+			}
+
+		case *DictDef:
+			// Implement Dict as key-value pairs: Name_key_KeyName, Name_val_KeyName
+			for k, v := range n.Pairs {
+				keyVar := fmt.Sprintf("%s_key_%s", n.Name, k)
+				valVar := fmt.Sprintf("%s_val_%s", n.Name, k)
+				
+				t.emit(fmt.Sprintf("crt %s", keyVar))
+				t.emit(fmt.Sprintf("psh %s %s", keyVar, k))
+				
+				t.emit(fmt.Sprintf("crt %s", valVar))
+				
+				resolvedVal := v
+				if rv, ok := allAliases[v]; ok {
+					resolvedVal = rv
+				}
+				t.emit(fmt.Sprintf("psh %s %s", valVar, resolvedVal))
+			}
+
 		case *ConsoleInfo:
 			if t.isLiteral(n.Content) {
 				tempStack := fmt.Sprintf("_lit_%d", t.LabelCounter)
@@ -646,23 +795,23 @@ func (t *Translator) translateBody(nodes []Node, localAliases map[string]string)
 				t.emit(fmt.Sprintf("out %s", content))
 			}
 			t.emit("otn")
-			
+
 		case *TemplateUse:
 			if cls, ok := t.Classes[n.ClassName]; ok {
 				t.translateBody(cls.Members, localAliases)
 			} else {
 				fmt.Printf("[Warn] Class %s not found\n", n.ClassName)
 			}
-			
+
 		case *AliasDef:
 			localAliases[n.Name] = n.Value
-			
+
 		case *LoopBlock:
 			t.translateLoop(n, localAliases)
-			
+
 		case *IfBlock:
 			t.translateIf(n, localAliases)
-			
+
 		case *CustomNode:
 			if t.ModLoader != nil {
 				if handler, ok := t.ModLoader.GetHandler(n.Keyword); ok {
@@ -701,10 +850,10 @@ func (t *Translator) isLiteral(s string) bool {
 
 func (t *Translator) translateLoop(loop *LoopBlock, localAliases map[string]string) {
 	fmt.Printf("[Warn] QVM lacks math operations. Loop(%s) cannot be dynamically implemented.\n", loop.Count)
-	
+
 	var count int
 	_, err := fmt.Sscanf(loop.Count, "%d", &count)
-	
+
 	if err == nil && count > 0 && count <= 10 {
 		fmt.Printf("[Info] Static unrolling Loop(%d)\n", count)
 		for i := 0; i < count; i++ {
@@ -792,21 +941,21 @@ func main() {
 	nameWithoutExt := strings.TrimSuffix(baseName, filepath.Ext(baseName))
 	cacheDir := "cache"
 	os.MkdirAll(cacheDir, os.ModePerm)
-	
+
 	outputFile := filepath.Join(cacheDir, nameWithoutExt+".qb")
 	err = ioutil.WriteFile(outputFile, []byte(qbCode), 0644)
 	if err != nil {
 		fmt.Printf("[Error] Cannot write cache file: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	fmt.Printf("[Info] Translated to: %s\n", outputFile)
 
 	// 7. Run QVM
 	cmd := exec.Command("./Qvm.exe", "--Run", outputFile)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	
+
 	fmt.Println("--- Running QVM ---")
 	err = cmd.Run()
 	if err != nil {
