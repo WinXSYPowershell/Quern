@@ -29,7 +29,7 @@ func (p *Program) Type() string { return "Program" }
 type FunctionDef struct {
 	Name   string
 	Body   []Node
-	IsMain bool // New field to mark main function
+	IsMain bool
 }
 
 func (f *FunctionDef) Type() string { return "FunctionDef" }
@@ -83,6 +83,15 @@ type IfBlock struct {
 
 func (i *IfBlock) Type() string { return "IfBlock" }
 
+// New Entrust Structure
+type EntrustBlock struct {
+	Condition string
+	Body      []Node
+	ID        int // Unique ID for generating function names
+}
+
+func (e *EntrustBlock) Type() string { return "EntrustBlock" }
+
 type CustomNode struct {
 	RawLine string
 	Keyword string
@@ -90,7 +99,6 @@ type CustomNode struct {
 
 func (c *CustomNode) Type() string { return "CustomNode" }
 
-// New Data Structures
 type ListDef struct {
 	Name  string
 	Items []string
@@ -100,7 +108,7 @@ func (l *ListDef) Type() string { return "ListDef" }
 
 type DictDef struct {
 	Name   string
-	Pairs  map[string]string // Key -> Value
+	Pairs  map[string]string
 }
 
 func (d *DictDef) Type() string { return "DictDef" }
@@ -161,37 +169,33 @@ func (p *Parser) parseLine(line string) (Node, error) {
 		return p.parseClass(line)
 	}
 
+	// Add Entrust Parsing
+	if strings.HasPrefix(line, "Entrust") {
+		return p.parseEntrust(line)
+	}
+
 	return nil, fmt.Errorf("Unknown top-level statement: %s", line)
 }
 
 func (p *Parser) parseFunction(line string) (*FunctionDef, error) {
-	// Extract name and check for (Main)
-	// Example: Function "MyFunc"(Main) { ...
-	// Example: Function "MyFunc" { ...
-
 	name := ""
 	isMain := false
 
-	// Remove "Function" prefix
 	rest := strings.TrimPrefix(line, "Function")
 	rest = strings.TrimSpace(rest)
 
-	// Find the name part (usually quoted)
 	if strings.HasPrefix(rest, "\"") {
 		endQuote := strings.Index(rest[1:], "\"")
 		if endQuote != -1 {
 			name = rest[1 : endQuote+1]
-			rest = rest[endQuote+2:] // Move past the closing quote
+			rest = rest[endQuote+2:]
 			rest = strings.TrimSpace(rest)
 
-			// Check for (Main)
 			if strings.HasPrefix(rest, "(Main)") {
 				isMain = true
-				rest = rest[6:] // Move past (Main)
+				rest = rest[6:]
 				rest = strings.TrimSpace(rest)
 			} else if strings.HasPrefix(rest, "(") {
-				// Handle other parameters if necessary, or just ignore for now
-				// For this requirement, we only care about Main
 				closeParen := strings.Index(rest, ")")
 				if closeParen != -1 {
 					rest = rest[closeParen+1:]
@@ -202,7 +206,6 @@ func (p *Parser) parseFunction(line string) (*FunctionDef, error) {
 	}
 
 	if name == "" {
-		// Fallback to old logic if parsing fails
 		parts := strings.Fields(line)
 		if len(parts) < 2 {
 			return nil, fmt.Errorf("Invalid function definition")
@@ -231,7 +234,42 @@ func (p *Parser) parseClass(line string) (*ClassDef, error) {
 	return &ClassDef{Name: name, Members: body}, nil
 }
 
-// parseBlock handles the content inside {}.
+// parseEntrust handles: Entrust (Condition) { ... }
+func (p *Parser) parseEntrust(line string) (*EntrustBlock, error) {
+	start := strings.Index(line, "(")
+	end := strings.Index(line, ")")
+	
+	if start == -1 || end == -1 || end < start {
+		return nil, fmt.Errorf("Invalid Entrust syntax: missing parentheses")
+	}
+
+	condition := strings.TrimSpace(line[start+1 : end])
+	
+	// Check if there is a block following
+	// The parser state is currently at the line with "Entrust (...)"
+	// We need to move to the next line to find "{" or assume it's on the same line
+	
+	// Advance pos to look for the block
+	// Note: parseBlock expects p.pos to be at the line containing "{" or the line after the header
+	
+	// Let's check if "{" is on the current line after ")"
+	restOfLine := strings.TrimSpace(line[end+1:])
+	if !strings.Contains(restOfLine, "{") {
+		p.pos++ // Move to next line to find "{"
+	}
+	
+	body, err := p.parseBlock()
+	if err != nil {
+		return nil, err
+	}
+
+	return &EntrustBlock{
+		Condition: condition,
+		Body:      body,
+		ID:        0, // Will be assigned by translator
+	}, nil
+}
+
 func (p *Parser) parseBlock() ([]Node, error) {
 	var nodes []Node
 
@@ -316,7 +354,7 @@ func (p *Parser) parseStatement(line string) (Node, error) {
 	fields := strings.Fields(line)
 	if len(fields) > 0 {
 		keyword := fields[0]
-		blacklist := []string{"Import", "Function", "Class"}
+		blacklist := []string{"Import", "Function", "Class", "Entrust"}
 		isBlacklisted := false
 		for _, b := range blacklist {
 			if keyword == b {
@@ -391,27 +429,20 @@ func (p *Parser) parseAlias(line string) (*AliasDef, error) {
 }
 
 func (p *Parser) parseList(line string) (*ListDef, error) {
-	// Expected format: DataStruct.List "Name" = [item1, item2, ...]
-	// Or simple: DataStruct.List "Name" = item1
-	
 	parts := strings.Fields(line)
 	if len(parts) < 4 {
 		return nil, fmt.Errorf("Invalid List definition: %s", line)
 	}
 
-	// parts[0] is DataStruct.List
 	name := strings.Trim(parts[1], "\"")
 	
-	// parts[2] should be =
 	if parts[2] != "=" {
 		return nil, fmt.Errorf("Expected '=' in List definition")
 	}
 
-	// Rest is the value
 	valuePart := strings.Join(parts[3:], " ")
 	items := make([]string, 0)
 
-	// Check if it's a bracketed list [...]
 	if strings.HasPrefix(valuePart, "[") && strings.HasSuffix(valuePart, "]") {
 		inner := strings.Trim(valuePart, "[]")
 		if inner != "" {
@@ -425,7 +456,6 @@ func (p *Parser) parseList(line string) (*ListDef, error) {
 			}
 		}
 	} else {
-		// Single item
 		val := strings.Trim(valuePart, "\"")
 		if val != "" {
 			items = append(items, val)
@@ -436,8 +466,6 @@ func (p *Parser) parseList(line string) (*ListDef, error) {
 }
 
 func (p *Parser) parseDict(line string) (*DictDef, error) {
-	// Expected format: DataStruct.Dict "Name" = {"key1": "val1", "key2": "val2"}
-	
 	parts := strings.Fields(line)
 	if len(parts) < 4 {
 		return nil, fmt.Errorf("Invalid Dict definition: %s", line)
@@ -455,11 +483,9 @@ func (p *Parser) parseDict(line string) (*DictDef, error) {
 	if strings.HasPrefix(valuePart, "{") && strings.HasSuffix(valuePart, "}") {
 		inner := strings.Trim(valuePart, "{}")
 		if inner != "" {
-			// Simple split by comma, assuming no nested structures for now
 			kvPairs := strings.Split(inner, ",")
 			for _, kv := range kvPairs {
 				kv = strings.TrimSpace(kv)
-				// Split by colon
 				colonIdx := strings.Index(kv, ":")
 				if colonIdx != -1 {
 					k := strings.TrimSpace(kv[:colonIdx])
@@ -680,7 +706,10 @@ type Translator struct {
 	Aliases      map[string]string
 	LabelCounter int
 	ModLoader    *ModLoader
-	MainFuncName string // Store the name of the main function
+	MainFuncName string
+	
+	// Entrust specific
+	Entrusts []*EntrustBlock
 }
 
 func NewTranslatorWithMods(loader *ModLoader) *Translator {
@@ -690,17 +719,22 @@ func NewTranslatorWithMods(loader *ModLoader) *Translator {
 		Aliases:      make(map[string]string),
 		ModLoader:    loader,
 		MainFuncName: "",
+		Entrusts:     make([]*EntrustBlock, 0),
 	}
 }
 
 func (t *Translator) Translate(prog *Program) string {
-	// First pass: Register Classes and Aliases
+	// First pass: Register Classes, Aliases, and Collect Entrusts
 	for _, node := range prog.Nodes {
 		switch n := node.(type) {
 		case *ClassDef:
 			t.Classes[n.Name] = n
 		case *AliasDef:
 			t.Aliases[n.Name] = n.Value
+		case *EntrustBlock:
+			n.ID = t.LabelCounter
+			t.LabelCounter++
+			t.Entrusts = append(t.Entrusts, n)
 		}
 	}
 
@@ -711,12 +745,14 @@ func (t *Translator) Translate(prog *Program) string {
 			t.translateBody(fn.Body, make(map[string]string))
 			t.emit("}")
 
-			// Check if this is the main function
 			if fn.IsMain {
 				t.MainFuncName = fn.Name
 			}
 		}
 	}
+
+	// Generate Entrust Functions and Loop
+	t.generateEntrustLogic()
 
 	// Append call to main function if found
 	if t.MainFuncName != "" {
@@ -724,6 +760,66 @@ func (t *Translator) Translate(prog *Program) string {
 	}
 
 	return strings.Join(t.Instructions, "\n")
+}
+
+func (t *Translator) generateEntrustLogic() {
+	if len(t.Entrusts) == 0 {
+		return
+	}
+
+	// 1. Generate individual Entrust functions and their Runners
+	for _, entrust := range t.Entrusts {
+		funcName := fmt.Sprintf("Entrust_%d", entrust.ID)
+		runFuncName := fmt.Sprintf("RunEntrust_%d", entrust.ID)
+
+		// Define the action function
+		t.emit(fmt.Sprintf("fnc %s {", funcName))
+		t.translateBody(entrust.Body, make(map[string]string))
+		t.emit("}")
+
+		// Define the runner function (checks condition)
+		t.emit(fmt.Sprintf("fnc %s {", runFuncName))
+		
+		// Parse condition: "left op right"
+		parts := strings.Fields(entrust.Condition)
+		if len(parts) == 3 {
+			left := parts[0]
+			op := parts[1]
+			right := parts[2]
+			// jmp left right op cal target
+			t.emit(fmt.Sprintf("jmp %s %s %s cal %s", left, right, op, funcName))
+		} else {
+			t.emit(fmt.Sprintf("# Invalid condition in Entrust %d: %s", entrust.ID, entrust.Condition))
+		}
+		
+		t.emit("}")
+	}
+
+	// 2. Generate the Global Loop that checks all entrusts
+	loopFuncName := "_EntrustLoop"
+	t.emit(fmt.Sprintf("fnc %s {", loopFuncName))
+	
+	for _, entrust := range t.Entrusts {
+		runFuncName := fmt.Sprintf("RunEntrust_%d", entrust.ID)
+		// Use jmp 1 = 1 cal RunEntrust_ID to always trigger the check
+		t.emit(fmt.Sprintf("jmp 1 = 1 cal %s", runFuncName))
+	}
+	
+	// Recursive call to keep the loop running forever
+	// Note: This will cause stack overflow eventually in a real VM without TCO, 
+	// but for this simple VM implementation, it's the standard way to loop.
+	t.emit(fmt.Sprintf("cal %s", loopFuncName))
+	
+	t.emit("}")
+
+	// Call the loop at the very beginning of execution logic (appended after main call usually, 
+	// but since we want it to run "always", we call it. 
+	// However, if Main returns, the program ends. 
+	// To make it truly "background", we should call it BEFORE Main or ensure Main doesn't return quickly.
+	// Given the structure, we'll append it after Main call, implying Main might block or the loop is the last thing.
+	// Actually, better to put it before Main if Main is long-running, or just append it.
+	// Let's append it after Main call as per standard script flow.
+	t.emit(fmt.Sprintf("cal %s", loopFuncName))
 }
 
 func (t *Translator) translateBody(nodes []Node, localAliases map[string]string) {
@@ -746,7 +842,6 @@ func (t *Translator) translateBody(nodes []Node, localAliases map[string]string)
 			t.emit(fmt.Sprintf("psh %s %s", n.Name, val))
 
 		case *ListDef:
-			// Implement List as individual variables: Name_0, Name_1... and Name_len
 			t.emit(fmt.Sprintf("crt %s_len", n.Name))
 			t.emit(fmt.Sprintf("psh %s_len %d", n.Name, len(n.Items)))
 			
@@ -762,7 +857,6 @@ func (t *Translator) translateBody(nodes []Node, localAliases map[string]string)
 			}
 
 		case *DictDef:
-			// Implement Dict as key-value pairs: Name_key_KeyName, Name_val_KeyName
 			for k, v := range n.Pairs {
 				keyVar := fmt.Sprintf("%s_key_%s", n.Name, k)
 				valVar := fmt.Sprintf("%s_val_%s", n.Name, k)
