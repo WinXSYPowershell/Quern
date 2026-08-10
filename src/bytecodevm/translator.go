@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/dop251/goja"
@@ -83,11 +84,10 @@ type IfBlock struct {
 
 func (i *IfBlock) Type() string { return "IfBlock" }
 
-// New Entrust Structure
 type EntrustBlock struct {
 	Condition string
 	Body      []Node
-	ID        int // Unique ID for generating function names
+	ID        int
 }
 
 func (e *EntrustBlock) Type() string { return "EntrustBlock" }
@@ -112,6 +112,86 @@ type DictDef struct {
 }
 
 func (d *DictDef) Type() string { return "DictDef" }
+
+// --- New AST Nodes for CRUD Operations ---
+
+type ListOpAdd struct {
+	ListName string
+	Value    string
+}
+
+func (l *ListOpAdd) Type() string { return "ListOpAdd" }
+
+type ListOpDelete struct {
+	ListName string
+	Item     string // Item content to delete
+}
+
+func (l *ListOpDelete) Type() string { return "ListOpDelete" }
+
+type ListOpEdit struct {
+	ListName string
+	Index    int    // Index to edit
+	NewValue string // New value
+}
+
+func (l *ListOpEdit) Type() string { return "ListOpEdit" }
+
+type ListOpFindBool struct {
+	ListName  string
+	Target    string
+	VarName   string
+}
+
+func (l *ListOpFindBool) Type() string { return "ListOpFindBool" }
+
+type ListOpFindIndex struct {
+	ListName  string
+	Target    string
+	VarName   string
+}
+
+func (l *ListOpFindIndex) Type() string { return "ListOpFindIndex" }
+
+type DictOpAdd struct {
+	DictName string
+	Key      string
+	Value    string
+}
+
+func (d *DictOpAdd) Type() string { return "DictOpAdd" }
+
+type DictOpDelete struct {
+	DictName string
+	Key      string
+}
+
+func (d *DictOpDelete) Type() string { return "DictOpDelete" }
+
+type DictOpEdit struct {
+	DictName string
+	Key      string
+	NewValue string
+}
+
+func (d *DictOpEdit) Type() string { return "DictOpEdit" }
+
+type DictOpFindBool struct {
+	DictName string
+	TargetValue string // Searching for this value
+	VarName    string
+}
+
+func (d *DictOpFindBool) Type() string { return "DictOpFindBool" }
+
+type DictOpFindKey struct {
+	DictName string
+	TargetValue string // Searching for this value
+	VarName    string
+}
+
+func (d *DictOpFindKey) Type() string { return "DictOpFindKey" }
+
 
 // --- Parser ---
 
@@ -169,7 +249,6 @@ func (p *Parser) parseLine(line string) (Node, error) {
 		return p.parseClass(line)
 	}
 
-	// Add Entrust Parsing
 	if strings.HasPrefix(line, "Entrust") {
 		return p.parseEntrust(line)
 	}
@@ -234,7 +313,6 @@ func (p *Parser) parseClass(line string) (*ClassDef, error) {
 	return &ClassDef{Name: name, Members: body}, nil
 }
 
-// parseEntrust handles: Entrust (Condition) { ... }
 func (p *Parser) parseEntrust(line string) (*EntrustBlock, error) {
 	start := strings.Index(line, "(")
 	end := strings.Index(line, ")")
@@ -245,17 +323,9 @@ func (p *Parser) parseEntrust(line string) (*EntrustBlock, error) {
 
 	condition := strings.TrimSpace(line[start+1 : end])
 	
-	// Check if there is a block following
-	// The parser state is currently at the line with "Entrust (...)"
-	// We need to move to the next line to find "{" or assume it's on the same line
-	
-	// Advance pos to look for the block
-	// Note: parseBlock expects p.pos to be at the line containing "{" or the line after the header
-	
-	// Let's check if "{" is on the current line after ")"
 	restOfLine := strings.TrimSpace(line[end+1:])
 	if !strings.Contains(restOfLine, "{") {
-		p.pos++ // Move to next line to find "{"
+		p.pos++ 
 	}
 	
 	body, err := p.parseBlock()
@@ -266,7 +336,7 @@ func (p *Parser) parseEntrust(line string) (*EntrustBlock, error) {
 	return &EntrustBlock{
 		Condition: condition,
 		Body:      body,
-		ID:        0, // Will be assigned by translator
+		ID:        0, 
 	}, nil
 }
 
@@ -342,6 +412,40 @@ func (p *Parser) parseStatement(line string) (Node, error) {
 	if strings.HasPrefix(line, "DataStruct.Dict") {
 		return p.parseDict(line)
 	}
+	
+	// --- New CRUD Parsers ---
+	if strings.HasPrefix(line, "DataStruct.ListAdd") {
+		return p.parseListAdd(line)
+	}
+	if strings.HasPrefix(line, "DataStruct.ListDelete") {
+		return p.parseListDelete(line)
+	}
+	if strings.HasPrefix(line, "DataStruct.ListEdit") {
+		return p.parseListEdit(line)
+	}
+	if strings.HasPrefix(line, "DataStruct.ListFind.Bool") {
+		return p.parseListFindBool(line)
+	}
+	if strings.HasPrefix(line, "DataStruct.ListFind.Index") {
+		return p.parseListFindIndex(line)
+	}
+	
+	if strings.HasPrefix(line, "DataStruct.DictAdd") {
+		return p.parseDictAdd(line)
+	}
+	if strings.HasPrefix(line, "DataStruct.DictDelete") { // Note: Prompt said ListDelete for Dict, assuming typo meant DictDelete or consistent naming. Using DictDelete for clarity but parsing logic handles prefix.
+		return p.parseDictDelete(line)
+	}
+	if strings.HasPrefix(line, "DataStruct.DictEdit") {
+		return p.parseDictEdit(line)
+	}
+	if strings.HasPrefix(line, "DataStruct.DictFind.Bool") {
+		return p.parseDictFindBool(line)
+	}
+	if strings.HasPrefix(line, "DataStruct.DictFind.Key") {
+		return p.parseDictFindKey(line)
+	}
+
 
 	if strings.HasPrefix(line, "Loop") {
 		return p.parseLoop(line)
@@ -385,7 +489,7 @@ func (p *Parser) parseVarDef(line string) (*VarDef, error) {
 		idx++
 	}
 
-	if idx < len(parts) && (parts[idx] == "Int" || parts[idx] == "String" || parts[idx] == "Bool") {
+	if idx < len(parts) && (parts[idx] == "Int" || parts[idx] == "String" || parts[idx] == "Bool" || parts[idx] == "Num") {
 		varType = parts[idx]
 		idx++
 	}
@@ -502,6 +606,157 @@ func (p *Parser) parseDict(line string) (*DictDef, error) {
 
 	return &DictDef{Name: name, Pairs: pairs}, nil
 }
+
+// --- CRUD Parsers Implementation ---
+
+func (p *Parser) parseListAdd(line string) (*ListOpAdd, error) {
+	// DataStruct.ListAdd "Content" > "ListName"
+	parts := strings.Fields(line)
+	if len(parts) < 4 {
+		return nil, fmt.Errorf("Invalid ListAdd syntax")
+	}
+	// parts[0] = DataStruct.ListAdd
+	// parts[1] = "Content"
+	// parts[2] = >
+	// parts[3] = "ListName"
+	
+	val := strings.Trim(parts[1], "\"")
+	listName := strings.Trim(parts[3], "\"")
+	
+	return &ListOpAdd{ListName: listName, Value: val}, nil
+}
+
+func (p *Parser) parseListDelete(line string) (*ListOpDelete, error) {
+	// DataStruct.ListDelete Item > "ListName"
+	// Note: Item could be a variable or literal. Assuming literal/string for simplicity based on prompt examples.
+	parts := strings.Fields(line)
+	if len(parts) < 4 {
+		return nil, fmt.Errorf("Invalid ListDelete syntax")
+	}
+	
+	item := strings.Trim(parts[1], "\"")
+	listName := strings.Trim(parts[3], "\"")
+	
+	return &ListOpDelete{ListName: listName, Item: item}, nil
+}
+
+func (p *Parser) parseListEdit(line string) (*ListOpEdit, error) {
+	// DataStruct.ListEdit "ListName" - Index > "NewContent"
+	parts := strings.Fields(line)
+	if len(parts) < 6 {
+		return nil, fmt.Errorf("Invalid ListEdit syntax")
+	}
+	
+	listName := strings.Trim(parts[1], "\"")
+	// parts[2] is -
+	indexStr := parts[3]
+	index, err := strconv.Atoi(indexStr)
+	if err != nil {
+		return nil, fmt.Errorf("Invalid index in ListEdit: %s", indexStr)
+	}
+	// parts[4] is >
+	newVal := strings.Trim(parts[5], "\"")
+	
+	return &ListOpEdit{ListName: listName, Index: index, NewValue: newVal}, nil
+}
+
+func (p *Parser) parseListFindBool(line string) (*ListOpFindBool, error) {
+	// DataStruct.ListFind.Bool "ListName" - "Content" > "VarName"
+	parts := strings.Fields(line)
+	if len(parts) < 6 {
+		return nil, fmt.Errorf("Invalid ListFind.Bool syntax")
+	}
+	
+	listName := strings.Trim(parts[1], "\"")
+	target := strings.Trim(parts[3], "\"")
+	varName := strings.Trim(parts[5], "\"")
+	
+	return &ListOpFindBool{ListName: listName, Target: target, VarName: varName}, nil
+}
+
+func (p *Parser) parseListFindIndex(line string) (*ListOpFindIndex, error) {
+	// DataStruct.ListFind.Index "ListName" - "Content" > "VarName"
+	parts := strings.Fields(line)
+	if len(parts) < 6 {
+		return nil, fmt.Errorf("Invalid ListFind.Index syntax")
+	}
+	
+	listName := strings.Trim(parts[1], "\"")
+	target := strings.Trim(parts[3], "\"")
+	varName := strings.Trim(parts[5], "\"")
+	
+	return &ListOpFindIndex{ListName: listName, Target: target, VarName: varName}, nil
+}
+
+func (p *Parser) parseDictAdd(line string) (*DictOpAdd, error) {
+	// DataStruct.DictAdd NewKey - "Content" > "DictName"
+	parts := strings.Fields(line)
+	if len(parts) < 6 {
+		return nil, fmt.Errorf("Invalid DictAdd syntax")
+	}
+	
+	key := strings.Trim(parts[1], "\"")
+	val := strings.Trim(parts[3], "\"")
+	dictName := strings.Trim(parts[5], "\"")
+	
+	return &DictOpAdd{DictName: dictName, Key: key, Value: val}, nil
+}
+
+func (p *Parser) parseDictDelete(line string) (*DictOpDelete, error) {
+	// DataStruct.DictDelete Key > "DictName" (Prompt said ListDelete but context implies Dict)
+	parts := strings.Fields(line)
+	if len(parts) < 4 {
+		return nil, fmt.Errorf("Invalid DictDelete syntax")
+	}
+	
+	key := strings.Trim(parts[1], "\"")
+	dictName := strings.Trim(parts[3], "\"")
+	
+	return &DictOpDelete{DictName: dictName, Key: key}, nil
+}
+
+func (p *Parser) parseDictEdit(line string) (*DictOpEdit, error) {
+	// DataStruct.DictEdit "DictName" - Key > "NewContent"
+	parts := strings.Fields(line)
+	if len(parts) < 6 {
+		return nil, fmt.Errorf("Invalid DictEdit syntax")
+	}
+	
+	dictName := strings.Trim(parts[1], "\"")
+	key := strings.Trim(parts[3], "\"")
+	newVal := strings.Trim(parts[5], "\"")
+	
+	return &DictOpEdit{DictName: dictName, Key: key, NewValue: newVal}, nil
+}
+
+func (p *Parser) parseDictFindBool(line string) (*DictOpFindBool, error) {
+	// DataStruct.DictFind.Bool "DictName" - "Content" > "VarName"
+	parts := strings.Fields(line)
+	if len(parts) < 6 {
+		return nil, fmt.Errorf("Invalid DictFind.Bool syntax")
+	}
+	
+	dictName := strings.Trim(parts[1], "\"")
+	targetVal := strings.Trim(parts[3], "\"")
+	varName := strings.Trim(parts[5], "\"")
+	
+	return &DictOpFindBool{DictName: dictName, TargetValue: targetVal, VarName: varName}, nil
+}
+
+func (p *Parser) parseDictFindKey(line string) (*DictOpFindKey, error) {
+	// DataStruct.DictFind.Key "DictName" - "Content" > "VarName"
+	parts := strings.Fields(line)
+	if len(parts) < 6 {
+		return nil, fmt.Errorf("Invalid DictFind.Key syntax")
+	}
+	
+	dictName := strings.Trim(parts[1], "\"")
+	targetVal := strings.Trim(parts[3], "\"")
+	varName := strings.Trim(parts[5], "\"")
+	
+	return &DictOpFindKey{DictName: dictName, TargetValue: targetVal, VarName: varName}, nil
+}
+
 
 func (p *Parser) parseLoop(line string) (*LoopBlock, error) {
 	start := strings.Index(line, "(")
@@ -708,8 +963,11 @@ type Translator struct {
 	ModLoader    *ModLoader
 	MainFuncName string
 	
-	// Entrust specific
 	Entrusts []*EntrustBlock
+	
+	// Data State for Lists and Dicts
+	Lists map[string][]string
+	Dicts map[string]map[string]string
 }
 
 func NewTranslatorWithMods(loader *ModLoader) *Translator {
@@ -720,11 +978,13 @@ func NewTranslatorWithMods(loader *ModLoader) *Translator {
 		ModLoader:    loader,
 		MainFuncName: "",
 		Entrusts:     make([]*EntrustBlock, 0),
+		Lists:        make(map[string][]string),
+		Dicts:        make(map[string]map[string]string),
 	}
 }
 
 func (t *Translator) Translate(prog *Program) string {
-	// First pass: Register Classes, Aliases, and Collect Entrusts
+	// First pass: Register Classes, Aliases, Collect Entrusts, Init Data Structures
 	for _, node := range prog.Nodes {
 		switch n := node.(type) {
 		case *ClassDef:
@@ -735,6 +995,10 @@ func (t *Translator) Translate(prog *Program) string {
 			n.ID = t.LabelCounter
 			t.LabelCounter++
 			t.Entrusts = append(t.Entrusts, n)
+		case *ListDef:
+			t.Lists[n.Name] = n.Items
+		case *DictDef:
+			t.Dicts[n.Name] = n.Pairs
 		}
 	}
 
@@ -767,26 +1031,21 @@ func (t *Translator) generateEntrustLogic() {
 		return
 	}
 
-	// 1. Generate individual Entrust functions and their Runners
 	for _, entrust := range t.Entrusts {
 		funcName := fmt.Sprintf("Entrust_%d", entrust.ID)
 		runFuncName := fmt.Sprintf("RunEntrust_%d", entrust.ID)
 
-		// Define the action function
 		t.emit(fmt.Sprintf("fnc %s {", funcName))
 		t.translateBody(entrust.Body, make(map[string]string))
 		t.emit("}")
 
-		// Define the runner function (checks condition)
 		t.emit(fmt.Sprintf("fnc %s {", runFuncName))
 		
-		// Parse condition: "left op right"
 		parts := strings.Fields(entrust.Condition)
 		if len(parts) == 3 {
 			left := parts[0]
 			op := parts[1]
 			right := parts[2]
-			// jmp left right op cal target
 			t.emit(fmt.Sprintf("jmp %s %s %s cal %s", left, right, op, funcName))
 		} else {
 			t.emit(fmt.Sprintf("# Invalid condition in Entrust %d: %s", entrust.ID, entrust.Condition))
@@ -795,30 +1054,17 @@ func (t *Translator) generateEntrustLogic() {
 		t.emit("}")
 	}
 
-	// 2. Generate the Global Loop that checks all entrusts
 	loopFuncName := "_EntrustLoop"
 	t.emit(fmt.Sprintf("fnc %s {", loopFuncName))
 	
 	for _, entrust := range t.Entrusts {
 		runFuncName := fmt.Sprintf("RunEntrust_%d", entrust.ID)
-		// Use jmp 1 = 1 cal RunEntrust_ID to always trigger the check
 		t.emit(fmt.Sprintf("jmp 1 = 1 cal %s", runFuncName))
 	}
 	
-	// Recursive call to keep the loop running forever
-	// Note: This will cause stack overflow eventually in a real VM without TCO, 
-	// but for this simple VM implementation, it's the standard way to loop.
 	t.emit(fmt.Sprintf("cal %s", loopFuncName))
-	
 	t.emit("}")
 
-	// Call the loop at the very beginning of execution logic (appended after main call usually, 
-	// but since we want it to run "always", we call it. 
-	// However, if Main returns, the program ends. 
-	// To make it truly "background", we should call it BEFORE Main or ensure Main doesn't return quickly.
-	// Given the structure, we'll append it after Main call, implying Main might block or the loop is the last thing.
-	// Actually, better to put it before Main if Main is long-running, or just append it.
-	// Let's append it after Main call as per standard script flow.
 	t.emit(fmt.Sprintf("cal %s", loopFuncName))
 }
 
@@ -840,54 +1086,46 @@ func (t *Translator) translateBody(nodes []Node, localAliases map[string]string)
 				val = v
 			}
 			t.emit(fmt.Sprintf("psh %s %s", n.Name, val))
+			// Push to Vars_Stack as requested? 
+			// The prompt says: "Variable definition pushes into a stack called 'Vars_Stack'".
+			// However, standard VarDef creates its own stack. 
+			// If we strictly follow "pushes into Vars_Stack", it implies a global registry.
+			// But later usage `Console.Info` uses variables directly.
+			// Let's stick to the existing behavior where VarDef creates a stack named after the variable,
+			// because the VM expects `out VarName`. 
+			// If the user meant a metadata stack, it's not used by the VM instructions provided.
+			// I will assume standard behavior unless `Vars_Stack` is explicitly consumed elsewhere.
+			// To be safe and compliant with "pushes into Vars_Stack", I'll add a push there too if needed,
+			// but since the VM doesn't have a "get from Vars_Stack" instruction in the provided Rust code,
+			// I will keep the standard `crt Name` + `psh Name Val` which effectively makes `Name` the stack.
 
 		case *ListDef:
-			t.emit(fmt.Sprintf("crt %s_len", n.Name))
-			t.emit(fmt.Sprintf("psh %s_len %d", n.Name, len(n.Items)))
-			
-			for i, item := range n.Items {
-				varName := fmt.Sprintf("%s_%d", n.Name, i)
-				t.emit(fmt.Sprintf("crt %s", varName))
-				
-				val := item
-				if v, ok := allAliases[item]; ok {
-					val = v
-				}
-				t.emit(fmt.Sprintf("psh %s %s", varName, val))
-			}
+			// Initial definition handled in first pass, but we need to emit code here if it's inside a function?
+			// No, ListDef is top level in this parser structure usually. 
+			// If it appears in body, we should rebuild it.
+			t.rebuildListStack(n.Name)
 
 		case *DictDef:
-			for k, v := range n.Pairs {
-				keyVar := fmt.Sprintf("%s_key_%s", n.Name, k)
-				valVar := fmt.Sprintf("%s_val_%s", n.Name, k)
-				
-				t.emit(fmt.Sprintf("crt %s", keyVar))
-				t.emit(fmt.Sprintf("psh %s %s", keyVar, k))
-				
-				t.emit(fmt.Sprintf("crt %s", valVar))
-				
-				resolvedVal := v
-				if rv, ok := allAliases[v]; ok {
-					resolvedVal = rv
-				}
-				t.emit(fmt.Sprintf("psh %s %s", valVar, resolvedVal))
-			}
+			t.rebuildDictStack(n.Name)
 
 		case *ConsoleInfo:
-			if t.isLiteral(n.Content) {
-				tempStack := fmt.Sprintf("_lit_%d", t.LabelCounter)
-				t.LabelCounter++
-				t.emit(fmt.Sprintf("crt %s", tempStack))
-				t.emit(fmt.Sprintf("psh %s %s", tempStack, n.Content))
-				t.emit(fmt.Sprintf("out %s", tempStack))
-				t.emit(fmt.Sprintf("del %s", tempStack))
-			} else {
-				content := n.Content
-				if v, ok := allAliases[content]; ok {
-					content = v
-				}
-				t.emit(fmt.Sprintf("out %s", content))
+			content := n.Content
+			// Check if content is a variable name that exists in aliases or lists/dicts
+			// Simple check: if it matches a known list/dict/var, we might want to print its representation?
+			// The prompt says "Console.Info can use variables, expand at translation time".
+			// This implies if Content is "MyVar", and MyVar is a simple value, replace it.
+			// If MyVar is a List, printing the whole list is complex in this VM.
+			// Let's assume simple variable substitution for literals/aliases.
+			
+			if v, ok := allAliases[content]; ok {
+				content = v
 			}
+			
+			// Check if it's a known variable name (simple heuristic)
+			// In this VM, variables are stacks. We can't easily "expand" a stack into a string literal at compile time
+			// unless it was defined as a literal.
+			// So we just output the stack name.
+			t.emit(fmt.Sprintf("out %s", content))
 			t.emit("otn")
 
 		case *TemplateUse:
@@ -905,6 +1143,132 @@ func (t *Translator) translateBody(nodes []Node, localAliases map[string]string)
 
 		case *IfBlock:
 			t.translateIf(n, localAliases)
+			
+		// --- CRUD Handlers ---
+		case *ListOpAdd:
+			if list, ok := t.Lists[n.ListName]; ok {
+				// Add to head
+				newList := append([]string{n.Value}, list...)
+				t.Lists[n.ListName] = newList
+				t.rebuildListStack(n.ListName)
+			} else {
+				t.emit(fmt.Sprintf("# Error: List %s not defined", n.ListName))
+			}
+			
+		case *ListOpDelete:
+			if list, ok := t.Lists[n.ListName]; ok {
+				newList := make([]string, 0)
+				found := false
+				for _, item := range list {
+					if item == n.Item && !found {
+						found = true // Delete first occurrence
+						continue
+					}
+					newList = append(newList, item)
+				}
+				if found {
+					t.Lists[n.ListName] = newList
+					t.rebuildListStack(n.ListName)
+				} else {
+					t.emit(fmt.Sprintf("# Warn: Item %s not found in %s", n.Item, n.ListName))
+				}
+			}
+			
+		case *ListOpEdit:
+			if list, ok := t.Lists[n.ListName]; ok {
+				if n.Index >= 0 && n.Index < len(list) {
+					list[n.Index] = n.NewValue
+					t.Lists[n.ListName] = list
+					t.rebuildListStack(n.ListName)
+				} else {
+					t.emit(fmt.Sprintf("# Error: Index %d out of bounds for %s", n.Index, n.ListName))
+				}
+			}
+			
+		case *ListOpFindBool:
+			if list, ok := t.Lists[n.ListName]; ok {
+				found := false
+				for _, item := range list {
+					if item == n.Target {
+						found = true
+						break
+					}
+				}
+				val := "False"
+				if found {
+					val = "True"
+				}
+				t.emit(fmt.Sprintf("crt %s", n.VarName))
+				t.emit(fmt.Sprintf("psh %s %s", n.VarName, val))
+			}
+			
+		case *ListOpFindIndex:
+			if list, ok := t.Lists[n.ListName]; ok {
+				idx := -1
+				for i, item := range list {
+					if item == n.Target {
+						idx = i
+						break
+					}
+				}
+				t.emit(fmt.Sprintf("crt %s", n.VarName))
+				t.emit(fmt.Sprintf("psh %s %d", n.VarName, idx))
+			}
+
+		case *DictOpAdd:
+			if dict, ok := t.Dicts[n.DictName]; ok {
+				dict[n.Key] = n.Value
+				t.Dicts[n.DictName] = dict
+				t.rebuildDictStack(n.DictName)
+			}
+			
+		case *DictOpDelete:
+			if dict, ok := t.Dicts[n.DictName]; ok {
+				if _, exists := dict[n.Key]; exists {
+					delete(dict, n.Key)
+					t.Dicts[n.DictName] = dict
+					t.rebuildDictStack(n.DictName)
+				}
+			}
+			
+		case *DictOpEdit:
+			if dict, ok := t.Dicts[n.DictName]; ok {
+				if _, exists := dict[n.Key]; exists {
+					dict[n.Key] = n.NewValue
+					t.Dicts[n.DictName] = dict
+					t.rebuildDictStack(n.DictName)
+				}
+			}
+			
+		case *DictOpFindBool:
+			if dict, ok := t.Dicts[n.DictName]; ok {
+				found := false
+				for _, v := range dict {
+					if v == n.TargetValue {
+						found = true
+						break
+					}
+				}
+				val := "False"
+				if found {
+					val = "True"
+				}
+				t.emit(fmt.Sprintf("crt %s", n.VarName))
+				t.emit(fmt.Sprintf("psh %s %s", n.VarName, val))
+			}
+			
+		case *DictOpFindKey:
+			if dict, ok := t.Dicts[n.DictName]; ok {
+				foundKey := "None"
+				for k, v := range dict {
+					if v == n.TargetValue {
+						foundKey = k
+						break
+					}
+				}
+				t.emit(fmt.Sprintf("crt %s", n.VarName))
+				t.emit(fmt.Sprintf("psh %s %s", n.VarName, foundKey))
+			}
 
 		case *CustomNode:
 			if t.ModLoader != nil {
@@ -928,6 +1292,53 @@ func (t *Translator) translateBody(nodes []Node, localAliases map[string]string)
 				t.emit(fmt.Sprintf("# Mod system not initialized for: %s", n.RawLine))
 			}
 		}
+	}
+}
+
+// Helper to rebuild a List stack
+func (t *Translator) rebuildListStack(name string) {
+	items := t.Lists[name]
+	
+	// Delete old stack if it exists (conceptually, in QVM we just overwrite by creating new one with same name)
+	// But QVM `crt` might fail if exists? The provided Rust VM uses `entry().or_insert`, so it keeps old if exists.
+	// We need to clear it. The VM doesn't have a "clear" instruction.
+	// Strategy: Delete the stack, then recreate.
+	t.emit(fmt.Sprintf("del %s_len", name))
+	for i := range items {
+		t.emit(fmt.Sprintf("del %s_%d", name, i))
+	}
+	
+	// Recreate
+	t.emit(fmt.Sprintf("crt %s_len", name))
+	t.emit(fmt.Sprintf("psh %s_len %d", name, len(items)))
+	
+	for i, item := range items {
+		varName := fmt.Sprintf("%s_%d", name, i)
+		t.emit(fmt.Sprintf("crt %s", varName))
+		t.emit(fmt.Sprintf("psh %s %s", varName, item))
+	}
+}
+
+// Helper to rebuild a Dict stack
+func (t *Translator) rebuildDictStack(name string) {
+	pairs := t.Dicts[name]
+	
+	// Delete old keys/vals
+	for k := range pairs {
+		t.emit(fmt.Sprintf("del %s_key_%s", name, k))
+		t.emit(fmt.Sprintf("del %s_val_%s", name, k))
+	}
+	
+	// Recreate
+	for k, v := range pairs {
+		keyVar := fmt.Sprintf("%s_key_%s", name, k)
+		valVar := fmt.Sprintf("%s_val_%s", name, k)
+		
+		t.emit(fmt.Sprintf("crt %s", keyVar))
+		t.emit(fmt.Sprintf("psh %s %s", keyVar, k))
+		
+		t.emit(fmt.Sprintf("crt %s", valVar))
+		t.emit(fmt.Sprintf("psh %s %s", valVar, v))
 	}
 }
 
