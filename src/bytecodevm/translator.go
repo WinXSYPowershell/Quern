@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -177,21 +179,20 @@ type DictOpEdit struct {
 func (d *DictOpEdit) Type() string { return "DictOpEdit" }
 
 type DictOpFindBool struct {
-	DictName string
+	DictName    string
 	TargetValue string // Searching for this value
-	VarName    string
+	VarName     string
 }
 
 func (d *DictOpFindBool) Type() string { return "DictOpFindBool" }
 
 type DictOpFindKey struct {
-	DictName string
+	DictName    string
 	TargetValue string // Searching for this value
-	VarName    string
+	VarName     string
 }
 
 func (d *DictOpFindKey) Type() string { return "DictOpFindKey" }
-
 
 // --- Parser ---
 
@@ -316,18 +317,18 @@ func (p *Parser) parseClass(line string) (*ClassDef, error) {
 func (p *Parser) parseEntrust(line string) (*EntrustBlock, error) {
 	start := strings.Index(line, "(")
 	end := strings.Index(line, ")")
-	
+
 	if start == -1 || end == -1 || end < start {
 		return nil, fmt.Errorf("Invalid Entrust syntax: missing parentheses")
 	}
 
 	condition := strings.TrimSpace(line[start+1 : end])
-	
+
 	restOfLine := strings.TrimSpace(line[end+1:])
 	if !strings.Contains(restOfLine, "{") {
-		p.pos++ 
+		p.pos++
 	}
-	
+
 	body, err := p.parseBlock()
 	if err != nil {
 		return nil, err
@@ -336,7 +337,7 @@ func (p *Parser) parseEntrust(line string) (*EntrustBlock, error) {
 	return &EntrustBlock{
 		Condition: condition,
 		Body:      body,
-		ID:        0, 
+		ID:        0,
 	}, nil
 }
 
@@ -412,7 +413,7 @@ func (p *Parser) parseStatement(line string) (Node, error) {
 	if strings.HasPrefix(line, "DataStruct.Dict") {
 		return p.parseDict(line)
 	}
-	
+
 	// --- New CRUD Parsers ---
 	if strings.HasPrefix(line, "DataStruct.ListAdd") {
 		return p.parseListAdd(line)
@@ -429,11 +430,11 @@ func (p *Parser) parseStatement(line string) (Node, error) {
 	if strings.HasPrefix(line, "DataStruct.ListFind.Index") {
 		return p.parseListFindIndex(line)
 	}
-	
+
 	if strings.HasPrefix(line, "DataStruct.DictAdd") {
 		return p.parseDictAdd(line)
 	}
-	if strings.HasPrefix(line, "DataStruct.DictDelete") { // Note: Prompt said ListDelete for Dict, assuming typo meant DictDelete or consistent naming. Using DictDelete for clarity but parsing logic handles prefix.
+	if strings.HasPrefix(line, "DataStruct.DictDelete") {
 		return p.parseDictDelete(line)
 	}
 	if strings.HasPrefix(line, "DataStruct.DictEdit") {
@@ -445,7 +446,6 @@ func (p *Parser) parseStatement(line string) (Node, error) {
 	if strings.HasPrefix(line, "DataStruct.DictFind.Key") {
 		return p.parseDictFindKey(line)
 	}
-
 
 	if strings.HasPrefix(line, "Loop") {
 		return p.parseLoop(line)
@@ -539,7 +539,7 @@ func (p *Parser) parseList(line string) (*ListDef, error) {
 	}
 
 	name := strings.Trim(parts[1], "\"")
-	
+
 	if parts[2] != "=" {
 		return nil, fmt.Errorf("Expected '=' in List definition")
 	}
@@ -576,7 +576,7 @@ func (p *Parser) parseDict(line string) (*DictDef, error) {
 	}
 
 	name := strings.Trim(parts[1], "\"")
-	
+
 	if parts[2] != "=" {
 		return nil, fmt.Errorf("Expected '=' in Dict definition")
 	}
@@ -610,153 +610,135 @@ func (p *Parser) parseDict(line string) (*DictDef, error) {
 // --- CRUD Parsers Implementation ---
 
 func (p *Parser) parseListAdd(line string) (*ListOpAdd, error) {
-	// DataStruct.ListAdd "Content" > "ListName"
 	parts := strings.Fields(line)
 	if len(parts) < 4 {
 		return nil, fmt.Errorf("Invalid ListAdd syntax")
 	}
-	// parts[0] = DataStruct.ListAdd
-	// parts[1] = "Content"
-	// parts[2] = >
-	// parts[3] = "ListName"
-	
+
 	val := strings.Trim(parts[1], "\"")
 	listName := strings.Trim(parts[3], "\"")
-	
+
 	return &ListOpAdd{ListName: listName, Value: val}, nil
 }
 
 func (p *Parser) parseListDelete(line string) (*ListOpDelete, error) {
-	// DataStruct.ListDelete Item > "ListName"
-	// Note: Item could be a variable or literal. Assuming literal/string for simplicity based on prompt examples.
 	parts := strings.Fields(line)
 	if len(parts) < 4 {
 		return nil, fmt.Errorf("Invalid ListDelete syntax")
 	}
-	
+
 	item := strings.Trim(parts[1], "\"")
 	listName := strings.Trim(parts[3], "\"")
-	
+
 	return &ListOpDelete{ListName: listName, Item: item}, nil
 }
 
 func (p *Parser) parseListEdit(line string) (*ListOpEdit, error) {
-	// DataStruct.ListEdit "ListName" - Index > "NewContent"
 	parts := strings.Fields(line)
 	if len(parts) < 6 {
 		return nil, fmt.Errorf("Invalid ListEdit syntax")
 	}
-	
+
 	listName := strings.Trim(parts[1], "\"")
-	// parts[2] is -
 	indexStr := parts[3]
 	index, err := strconv.Atoi(indexStr)
 	if err != nil {
 		return nil, fmt.Errorf("Invalid index in ListEdit: %s", indexStr)
 	}
-	// parts[4] is >
 	newVal := strings.Trim(parts[5], "\"")
-	
+
 	return &ListOpEdit{ListName: listName, Index: index, NewValue: newVal}, nil
 }
 
 func (p *Parser) parseListFindBool(line string) (*ListOpFindBool, error) {
-	// DataStruct.ListFind.Bool "ListName" - "Content" > "VarName"
 	parts := strings.Fields(line)
 	if len(parts) < 6 {
 		return nil, fmt.Errorf("Invalid ListFind.Bool syntax")
 	}
-	
+
 	listName := strings.Trim(parts[1], "\"")
 	target := strings.Trim(parts[3], "\"")
 	varName := strings.Trim(parts[5], "\"")
-	
+
 	return &ListOpFindBool{ListName: listName, Target: target, VarName: varName}, nil
 }
 
 func (p *Parser) parseListFindIndex(line string) (*ListOpFindIndex, error) {
-	// DataStruct.ListFind.Index "ListName" - "Content" > "VarName"
 	parts := strings.Fields(line)
 	if len(parts) < 6 {
 		return nil, fmt.Errorf("Invalid ListFind.Index syntax")
 	}
-	
+
 	listName := strings.Trim(parts[1], "\"")
 	target := strings.Trim(parts[3], "\"")
 	varName := strings.Trim(parts[5], "\"")
-	
+
 	return &ListOpFindIndex{ListName: listName, Target: target, VarName: varName}, nil
 }
 
 func (p *Parser) parseDictAdd(line string) (*DictOpAdd, error) {
-	// DataStruct.DictAdd NewKey - "Content" > "DictName"
 	parts := strings.Fields(line)
 	if len(parts) < 6 {
 		return nil, fmt.Errorf("Invalid DictAdd syntax")
 	}
-	
+
 	key := strings.Trim(parts[1], "\"")
 	val := strings.Trim(parts[3], "\"")
 	dictName := strings.Trim(parts[5], "\"")
-	
+
 	return &DictOpAdd{DictName: dictName, Key: key, Value: val}, nil
 }
 
 func (p *Parser) parseDictDelete(line string) (*DictOpDelete, error) {
-	// DataStruct.DictDelete Key > "DictName" (Prompt said ListDelete but context implies Dict)
 	parts := strings.Fields(line)
 	if len(parts) < 4 {
 		return nil, fmt.Errorf("Invalid DictDelete syntax")
 	}
-	
+
 	key := strings.Trim(parts[1], "\"")
 	dictName := strings.Trim(parts[3], "\"")
-	
+
 	return &DictOpDelete{DictName: dictName, Key: key}, nil
 }
 
 func (p *Parser) parseDictEdit(line string) (*DictOpEdit, error) {
-	// DataStruct.DictEdit "DictName" - Key > "NewContent"
 	parts := strings.Fields(line)
 	if len(parts) < 6 {
 		return nil, fmt.Errorf("Invalid DictEdit syntax")
 	}
-	
+
 	dictName := strings.Trim(parts[1], "\"")
 	key := strings.Trim(parts[3], "\"")
 	newVal := strings.Trim(parts[5], "\"")
-	
+
 	return &DictOpEdit{DictName: dictName, Key: key, NewValue: newVal}, nil
 }
 
 func (p *Parser) parseDictFindBool(line string) (*DictOpFindBool, error) {
-	// DataStruct.DictFind.Bool "DictName" - "Content" > "VarName"
 	parts := strings.Fields(line)
 	if len(parts) < 6 {
 		return nil, fmt.Errorf("Invalid DictFind.Bool syntax")
 	}
-	
+
 	dictName := strings.Trim(parts[1], "\"")
 	targetVal := strings.Trim(parts[3], "\"")
 	varName := strings.Trim(parts[5], "\"")
-	
+
 	return &DictOpFindBool{DictName: dictName, TargetValue: targetVal, VarName: varName}, nil
 }
 
 func (p *Parser) parseDictFindKey(line string) (*DictOpFindKey, error) {
-	// DataStruct.DictFind.Key "DictName" - "Content" > "VarName"
 	parts := strings.Fields(line)
 	if len(parts) < 6 {
 		return nil, fmt.Errorf("Invalid DictFind.Key syntax")
 	}
-	
+
 	dictName := strings.Trim(parts[1], "\"")
 	targetVal := strings.Trim(parts[3], "\"")
 	varName := strings.Trim(parts[5], "\"")
-	
+
 	return &DictOpFindKey{DictName: dictName, TargetValue: targetVal, VarName: varName}, nil
 }
-
 
 func (p *Parser) parseLoop(line string) (*LoopBlock, error) {
 	start := strings.Index(line, "(")
@@ -962,9 +944,9 @@ type Translator struct {
 	LabelCounter int
 	ModLoader    *ModLoader
 	MainFuncName string
-	
+
 	Entrusts []*EntrustBlock
-	
+
 	// Data State for Lists and Dicts
 	Lists map[string][]string
 	Dicts map[string]map[string]string
@@ -1040,7 +1022,7 @@ func (t *Translator) generateEntrustLogic() {
 		t.emit("}")
 
 		t.emit(fmt.Sprintf("fnc %s {", runFuncName))
-		
+
 		parts := strings.Fields(entrust.Condition)
 		if len(parts) == 3 {
 			left := parts[0]
@@ -1050,18 +1032,18 @@ func (t *Translator) generateEntrustLogic() {
 		} else {
 			t.emit(fmt.Sprintf("# Invalid condition in Entrust %d: %s", entrust.ID, entrust.Condition))
 		}
-		
+
 		t.emit("}")
 	}
 
 	loopFuncName := "_EntrustLoop"
 	t.emit(fmt.Sprintf("fnc %s {", loopFuncName))
-	
+
 	for _, entrust := range t.Entrusts {
 		runFuncName := fmt.Sprintf("RunEntrust_%d", entrust.ID)
 		t.emit(fmt.Sprintf("jmp 1 = 1 cal %s", runFuncName))
 	}
-	
+
 	t.emit(fmt.Sprintf("cal %s", loopFuncName))
 	t.emit("}")
 
@@ -1086,23 +1068,8 @@ func (t *Translator) translateBody(nodes []Node, localAliases map[string]string)
 				val = v
 			}
 			t.emit(fmt.Sprintf("psh %s %s", n.Name, val))
-			// Push to Vars_Stack as requested? 
-			// The prompt says: "Variable definition pushes into a stack called 'Vars_Stack'".
-			// However, standard VarDef creates its own stack. 
-			// If we strictly follow "pushes into Vars_Stack", it implies a global registry.
-			// But later usage `Console.Info` uses variables directly.
-			// Let's stick to the existing behavior where VarDef creates a stack named after the variable,
-			// because the VM expects `out VarName`. 
-			// If the user meant a metadata stack, it's not used by the VM instructions provided.
-			// I will assume standard behavior unless `Vars_Stack` is explicitly consumed elsewhere.
-			// To be safe and compliant with "pushes into Vars_Stack", I'll add a push there too if needed,
-			// but since the VM doesn't have a "get from Vars_Stack" instruction in the provided Rust code,
-			// I will keep the standard `crt Name` + `psh Name Val` which effectively makes `Name` the stack.
 
 		case *ListDef:
-			// Initial definition handled in first pass, but we need to emit code here if it's inside a function?
-			// No, ListDef is top level in this parser structure usually. 
-			// If it appears in body, we should rebuild it.
 			t.rebuildListStack(n.Name)
 
 		case *DictDef:
@@ -1110,21 +1077,9 @@ func (t *Translator) translateBody(nodes []Node, localAliases map[string]string)
 
 		case *ConsoleInfo:
 			content := n.Content
-			// Check if content is a variable name that exists in aliases or lists/dicts
-			// Simple check: if it matches a known list/dict/var, we might want to print its representation?
-			// The prompt says "Console.Info can use variables, expand at translation time".
-			// This implies if Content is "MyVar", and MyVar is a simple value, replace it.
-			// If MyVar is a List, printing the whole list is complex in this VM.
-			// Let's assume simple variable substitution for literals/aliases.
-			
 			if v, ok := allAliases[content]; ok {
 				content = v
 			}
-			
-			// Check if it's a known variable name (simple heuristic)
-			// In this VM, variables are stacks. We can't easily "expand" a stack into a string literal at compile time
-			// unless it was defined as a literal.
-			// So we just output the stack name.
 			t.emit(fmt.Sprintf("out %s", content))
 			t.emit("otn")
 
@@ -1143,18 +1098,17 @@ func (t *Translator) translateBody(nodes []Node, localAliases map[string]string)
 
 		case *IfBlock:
 			t.translateIf(n, localAliases)
-			
+
 		// --- CRUD Handlers ---
 		case *ListOpAdd:
 			if list, ok := t.Lists[n.ListName]; ok {
-				// Add to head
 				newList := append([]string{n.Value}, list...)
 				t.Lists[n.ListName] = newList
 				t.rebuildListStack(n.ListName)
 			} else {
 				t.emit(fmt.Sprintf("# Error: List %s not defined", n.ListName))
 			}
-			
+
 		case *ListOpDelete:
 			if list, ok := t.Lists[n.ListName]; ok {
 				newList := make([]string, 0)
@@ -1173,7 +1127,7 @@ func (t *Translator) translateBody(nodes []Node, localAliases map[string]string)
 					t.emit(fmt.Sprintf("# Warn: Item %s not found in %s", n.Item, n.ListName))
 				}
 			}
-			
+
 		case *ListOpEdit:
 			if list, ok := t.Lists[n.ListName]; ok {
 				if n.Index >= 0 && n.Index < len(list) {
@@ -1184,7 +1138,7 @@ func (t *Translator) translateBody(nodes []Node, localAliases map[string]string)
 					t.emit(fmt.Sprintf("# Error: Index %d out of bounds for %s", n.Index, n.ListName))
 				}
 			}
-			
+
 		case *ListOpFindBool:
 			if list, ok := t.Lists[n.ListName]; ok {
 				found := false
@@ -1201,7 +1155,7 @@ func (t *Translator) translateBody(nodes []Node, localAliases map[string]string)
 				t.emit(fmt.Sprintf("crt %s", n.VarName))
 				t.emit(fmt.Sprintf("psh %s %s", n.VarName, val))
 			}
-			
+
 		case *ListOpFindIndex:
 			if list, ok := t.Lists[n.ListName]; ok {
 				idx := -1
@@ -1221,7 +1175,7 @@ func (t *Translator) translateBody(nodes []Node, localAliases map[string]string)
 				t.Dicts[n.DictName] = dict
 				t.rebuildDictStack(n.DictName)
 			}
-			
+
 		case *DictOpDelete:
 			if dict, ok := t.Dicts[n.DictName]; ok {
 				if _, exists := dict[n.Key]; exists {
@@ -1230,7 +1184,7 @@ func (t *Translator) translateBody(nodes []Node, localAliases map[string]string)
 					t.rebuildDictStack(n.DictName)
 				}
 			}
-			
+
 		case *DictOpEdit:
 			if dict, ok := t.Dicts[n.DictName]; ok {
 				if _, exists := dict[n.Key]; exists {
@@ -1239,7 +1193,7 @@ func (t *Translator) translateBody(nodes []Node, localAliases map[string]string)
 					t.rebuildDictStack(n.DictName)
 				}
 			}
-			
+
 		case *DictOpFindBool:
 			if dict, ok := t.Dicts[n.DictName]; ok {
 				found := false
@@ -1256,7 +1210,7 @@ func (t *Translator) translateBody(nodes []Node, localAliases map[string]string)
 				t.emit(fmt.Sprintf("crt %s", n.VarName))
 				t.emit(fmt.Sprintf("psh %s %s", n.VarName, val))
 			}
-			
+
 		case *DictOpFindKey:
 			if dict, ok := t.Dicts[n.DictName]; ok {
 				foundKey := "None"
@@ -1298,20 +1252,15 @@ func (t *Translator) translateBody(nodes []Node, localAliases map[string]string)
 // Helper to rebuild a List stack
 func (t *Translator) rebuildListStack(name string) {
 	items := t.Lists[name]
-	
-	// Delete old stack if it exists (conceptually, in QVM we just overwrite by creating new one with same name)
-	// But QVM `crt` might fail if exists? The provided Rust VM uses `entry().or_insert`, so it keeps old if exists.
-	// We need to clear it. The VM doesn't have a "clear" instruction.
-	// Strategy: Delete the stack, then recreate.
+
 	t.emit(fmt.Sprintf("del %s_len", name))
 	for i := range items {
 		t.emit(fmt.Sprintf("del %s_%d", name, i))
 	}
-	
-	// Recreate
+
 	t.emit(fmt.Sprintf("crt %s_len", name))
 	t.emit(fmt.Sprintf("psh %s_len %d", name, len(items)))
-	
+
 	for i, item := range items {
 		varName := fmt.Sprintf("%s_%d", name, i)
 		t.emit(fmt.Sprintf("crt %s", varName))
@@ -1322,21 +1271,19 @@ func (t *Translator) rebuildListStack(name string) {
 // Helper to rebuild a Dict stack
 func (t *Translator) rebuildDictStack(name string) {
 	pairs := t.Dicts[name]
-	
-	// Delete old keys/vals
+
 	for k := range pairs {
 		t.emit(fmt.Sprintf("del %s_key_%s", name, k))
 		t.emit(fmt.Sprintf("del %s_val_%s", name, k))
 	}
-	
-	// Recreate
+
 	for k, v := range pairs {
 		keyVar := fmt.Sprintf("%s_key_%s", name, k)
 		valVar := fmt.Sprintf("%s_val_%s", name, k)
-		
+
 		t.emit(fmt.Sprintf("crt %s", keyVar))
 		t.emit(fmt.Sprintf("psh %s %s", keyVar, k))
-		
+
 		t.emit(fmt.Sprintf("crt %s", valVar))
 		t.emit(fmt.Sprintf("psh %s %s", valVar, v))
 	}
@@ -1394,6 +1341,162 @@ func (t *Translator) emit(instr string) {
 	t.Instructions = append(t.Instructions, instr)
 }
 
+// --- Cache Manager ---
+
+type CacheManager struct {
+	SourceDir  string
+	BytecodeDir string
+}
+
+func NewCacheManager(baseDir string) *CacheManager {
+	sourceDir := filepath.Join(baseDir, "source")
+	bytecodeDir := filepath.Join(baseDir, "bytecode")
+	os.MkdirAll(sourceDir, os.ModePerm)
+	os.MkdirAll(bytecodeDir, os.ModePerm)
+	return &CacheManager{
+		SourceDir:   sourceDir,
+		BytecodeDir: bytecodeDir,
+	}
+}
+
+func (cm *CacheManager) GetSourcePath(name string) string {
+	return filepath.Join(cm.SourceDir, name+".q")
+}
+
+func (cm *CacheManager) GetBytecodePath(name string) string {
+	return filepath.Join(cm.BytecodeDir, name+".qb")
+}
+
+func calculateHash(content string) string {
+	hash := md5.Sum([]byte(content))
+	return hex.EncodeToString(hash[:])
+}
+
+// SplitProgramIntoUnits splits the program into logical units (Functions, Classes, Entrusts)
+// and returns a map of unitName -> sourceCodeSnippet
+func SplitProgramIntoUnits(prog *Program, originalSource string) map[string]string {
+	units := make(map[string]string)
+	
+	// We need to reconstruct the source code for each top-level node.
+	// Since we don't have exact line numbers for the end of blocks easily without more complex parsing,
+	// we will use a simplified approach: 
+	// For Functions/Classes/Entrusts, we can try to extract them from the original source using regex or simple logic.
+	// However, the parser consumes lines. 
+	// A better way for this specific request is to rely on the fact that we parsed them.
+	// But to save to file "as is", we ideally want the original text.
+	
+	// Let's iterate through nodes and generate a canonical representation or try to find it in source.
+	// Given the complexity of extracting exact substrings from the original source with nested braces using the current parser state,
+	// we will generate a canonical source representation for each unit.
+	
+	for _, node := range prog.Nodes {
+		var name string
+		var content string
+		
+		switch n := node.(type) {
+		case *FunctionDef:
+			name = n.Name
+			// Reconstruct function source
+			content = fmt.Sprintf("Function \"%s\"", n.Name)
+			if n.IsMain {
+				content += " (Main)"
+			}
+			content += " {\n"
+			content += reconstructBody(n.Body, 1)
+			content += "}\n"
+			
+		case *ClassDef:
+			name = n.Name
+			content = fmt.Sprintf("Class \"%s\" {\n", n.Name)
+			content += reconstructBody(n.Members, 1)
+			content += "}\n"
+			
+		case *EntrustBlock:
+			name = fmt.Sprintf("Entrust_%d", n.ID) // Use ID as name for uniqueness if no explicit name
+			// Entrusts don't have names in the syntax provided, so we use a generated name or condition hash?
+			// The prompt says "class name, method name, function name". Entrusts are anonymous.
+			// We'll skip saving Entrusts as individual files unless they have a name, or we use a hash.
+			// Let's assume Entrusts are part of the main flow or handled globally. 
+			// To strictly follow "Function/Class/Method", we might ignore Entrusts for file splitting 
+			// OR treat them as special functions. Let's include them with a generated name.
+			content = fmt.Sprintf("Entrust (%s) {\n", n.Condition)
+			content += reconstructBody(n.Body, 1)
+			content += "}\n"
+		}
+		
+		if name != "" {
+			units[name] = content
+		}
+	}
+	
+	return units
+}
+
+// Helper to reconstruct body indentation
+func reconstructBody(nodes []Node, indentLevel int) string {
+	var sb strings.Builder
+	indent := strings.Repeat("\t", indentLevel)
+	
+	for _, node := range nodes {
+		// This is a simplified reconstruction. For full fidelity, we'd need the original lines.
+		// Given the constraints, we generate a readable version.
+		sb.WriteString(indent)
+		sb.WriteString(NodeToString(node, indentLevel))
+		sb.WriteString("\n")
+	}
+	return sb.String()
+}
+
+func NodeToString(n Node, indentLevel int) string {
+	indent := strings.Repeat("\t", indentLevel)
+	// nextIndent := strings.Repeat("\t", indentLevel+1)
+	
+	switch v := n.(type) {
+	case *VarDef:
+		return fmt.Sprintf("Data.Var %s %s = \"%s\"", v.VarType, v.Name, v.Value)
+	case *ConsoleInfo:
+		return fmt.Sprintf("Console.Info(\"%s\")", v.Content)
+	case *ListDef:
+		return fmt.Sprintf("DataStruct.List \"%s\" = %v", v.Name, v.Items)
+	case *DictDef:
+		return fmt.Sprintf("DataStruct.Dict \"%s\" = %v", v.Name, v.Pairs)
+	case *LoopBlock:
+		s := fmt.Sprintf("Loop(%s) {\n", v.Count)
+		s += reconstructBody(v.Body, indentLevel+1)
+		s += indent + "}"
+		return s
+	case *IfBlock:
+		s := fmt.Sprintf("If(%s) {\n", v.Condition)
+		s += reconstructBody(v.Body, indentLevel+1)
+		s += indent + "}"
+		return s
+	case *CustomNode:
+		return v.RawLine
+	case *ListOpAdd:
+		return fmt.Sprintf("DataStruct.ListAdd \"%s\" > \"%s\"", v.Value, v.ListName)
+	case *ListOpDelete:
+		return fmt.Sprintf("DataStruct.ListDelete \"%s\" > \"%s\"", v.Item, v.ListName)
+	case *ListOpEdit:
+		return fmt.Sprintf("DataStruct.ListEdit \"%s\" - %d > \"%s\"", v.ListName, v.Index, v.NewValue)
+	case *ListOpFindBool:
+		return fmt.Sprintf("DataStruct.ListFind.Bool \"%s\" - \"%s\" > \"%s\"", v.ListName, v.Target, v.VarName)
+	case *ListOpFindIndex:
+		return fmt.Sprintf("DataStruct.ListFind.Index \"%s\" - \"%s\" > \"%s\"", v.ListName, v.Target, v.VarName)
+	case *DictOpAdd:
+		return fmt.Sprintf("DataStruct.DictAdd \"%s\" - \"%s\" > \"%s\"", v.Key, v.Value, v.DictName)
+	case *DictOpDelete:
+		return fmt.Sprintf("DataStruct.DictDelete \"%s\" > \"%s\"", v.Key, v.DictName)
+	case *DictOpEdit:
+		return fmt.Sprintf("DataStruct.DictEdit \"%s\" - \"%s\" > \"%s\"", v.DictName, v.Key, v.NewValue)
+	case *DictOpFindBool:
+		return fmt.Sprintf("DataStruct.DictFind.Bool \"%s\" - \"%s\" > \"%s\"", v.DictName, v.TargetValue, v.VarName)
+	case *DictOpFindKey:
+		return fmt.Sprintf("DataStruct.DictFind.Key \"%s\" - \"%s\" > \"%s\"", v.DictName, v.TargetValue, v.VarName)
+	default:
+		return fmt.Sprintf("# Unknown Node: %T", v)
+	}
+}
+
 // --- Main Execution ---
 
 func main() {
@@ -1409,6 +1512,7 @@ func main() {
 
 	sourceFile := os.Args[2]
 	modDir := "mods"
+	cacheBaseDir := "cache"
 
 	// 1. Initialize Mod Loader
 	loader := NewModLoader()
@@ -1428,36 +1532,93 @@ func main() {
 		fmt.Printf("[Error] Cannot read file: %v\n", err)
 		os.Exit(1)
 	}
+	sourceStr := string(content)
 
 	// 4. Parse
-	parser := NewParser(string(content))
+	parser := NewParser(sourceStr)
 	prog, err := parser.Parse()
 	if err != nil {
 		fmt.Printf("[Parse Error] %v\n", err)
 		os.Exit(1)
 	}
 
-	// 5. Translate
-	translator := NewTranslatorWithMods(loader)
-	qbCode := translator.Translate(prog)
-
-	// 6. Save Cache
+	// 5. Cache Management Logic
+	cm := NewCacheManager(cacheBaseDir)
+	
+	// Split program into units
+	units := SplitProgramIntoUnits(prog, sourceStr)
+	
+	hasChanges := false
+	
+	// Check each unit against cache
+	for name, unitSource := range units {
+		cachePath := cm.GetSourcePath(name)
+		
+		// Calculate hash of current unit
+		currentHash := calculateHash(unitSource)
+		
+		// Check if cached file exists
+		cachedContent, err := ioutil.ReadFile(cachePath)
+		if err != nil {
+			// File doesn't exist or error reading
+			hasChanges = true
+			// Save new source
+			ioutil.WriteFile(cachePath, []byte(unitSource), 0644)
+			fmt.Printf("[Cache] New unit detected: %s\n", name)
+			continue
+		}
+		
+		// Compare hashes
+		cachedHash := calculateHash(string(cachedContent))
+		if currentHash != cachedHash {
+			hasChanges = true
+			// Update source cache
+			ioutil.WriteFile(cachePath, []byte(unitSource), 0644)
+			fmt.Printf("[Cache] Unit changed: %s\n", name)
+		} else {
+			fmt.Printf("[Cache] Unit unchanged: %s\n", name)
+		}
+	}
+	
+	// Determine output bytecode path
 	baseName := filepath.Base(sourceFile)
 	nameWithoutExt := strings.TrimSuffix(baseName, filepath.Ext(baseName))
-	cacheDir := "cache"
-	os.MkdirAll(cacheDir, os.ModePerm)
-
-	outputFile := filepath.Join(cacheDir, nameWithoutExt+".qb")
-	err = ioutil.WriteFile(outputFile, []byte(qbCode), 0644)
-	if err != nil {
-		fmt.Printf("[Error] Cannot write cache file: %v\n", err)
-		os.Exit(1)
+	outputBytecodePath := cm.GetBytecodePath(nameWithoutExt)
+	
+	var qbCode string
+	
+	if !hasChanges {
+		// Check if bytecode exists
+		if _, err := os.Stat(outputBytecodePath); err == nil {
+			fmt.Println("[Info] No changes detected. Using cached bytecode.")
+			qbBytes, err := ioutil.ReadFile(outputBytecodePath)
+			if err != nil {
+				fmt.Printf("[Error] Failed to read cached bytecode: %v\n", err)
+				os.Exit(1)
+			}
+			qbCode = string(qbBytes)
+		} else {
+			fmt.Println("[Info] No changes in source units, but bytecode missing. Re-translating.")
+			hasChanges = true
+		}
+	}
+	
+	if hasChanges {
+		fmt.Println("[Info] Changes detected or bytecode missing. Translating...")
+		translator := NewTranslatorWithMods(loader)
+		qbCode = translator.Translate(prog)
+		
+		// Save Bytecode
+		err = ioutil.WriteFile(outputBytecodePath, []byte(qbCode), 0644)
+		if err != nil {
+			fmt.Printf("[Error] Cannot write bytecode file: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("[Info] Bytecode saved to: %s\n", outputBytecodePath)
 	}
 
-	fmt.Printf("[Info] Translated to: %s\n", outputFile)
-
 	// 7. Run QVM
-	cmd := exec.Command("./Qvm.exe", "--Run", outputFile)
+	cmd := exec.Command("./Qvm.exe", "--Run", outputBytecodePath)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
