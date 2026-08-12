@@ -79,8 +79,12 @@ type LoopBlock struct {
 
 func (l *LoopBlock) Type() string { return "LoopBlock" }
 
+// Modified IfBlock to support logic operators
 type IfBlock struct {
-	Condition string
+	LeftCond  string // e.g., "a = 1"
+	RightCond string // e.g., "b = 2" (empty if no logic op)
+	LogicOp   string // "", "and", "or"
+	IsNot     bool   // true if 'not' keyword is present
 	Body      []Node
 }
 
@@ -755,19 +759,85 @@ func (p *Parser) parseLoop(line string) (*LoopBlock, error) {
 	return &LoopBlock{Count: count, Body: body}, nil
 }
 
+// Updated parseIf to support not, and, or
 func (p *Parser) parseIf(line string) (*IfBlock, error) {
 	start := strings.Index(line, "(")
-	end := strings.Index(line, ")")
-	if start == -1 || end == -1 {
+	end := strings.LastIndex(line, ")") // Use LastIndex to handle nested parens if any, though simple parser assumes flat
+	
+	if start == -1 || end == -1 || end <= start {
 		return nil, fmt.Errorf("Invalid If syntax")
 	}
-	cond := strings.TrimSpace(line[start+1 : end])
+	
+	rawCond := strings.TrimSpace(line[start+1 : end])
+	
+	// Parse Logic Keywords
+	isNot := false
+	logicOp := ""
+	leftCond := ""
+	rightCond := ""
+	
+	// Check for NOT
+	if strings.HasPrefix(strings.ToLower(rawCond), "not ") {
+		isNot = true
+		rawCond = strings.TrimSpace(rawCond[4:])
+	}
+	
+	// Check for AND / OR
+	// Simple split by space, looking for keywords. 
+	// Note: This simple parser assumes conditions don't contain spaces inside values unless quoted, 
+	// but our condition format is usually "var op var".
+	
+	andIdx := findLogicKeyword(rawCond, "and")
+	orIdx := findLogicKeyword(rawCond, "or")
+	
+	if andIdx != -1 {
+		logicOp = "and"
+		leftCond = strings.TrimSpace(rawCond[:andIdx])
+		rightCond = strings.TrimSpace(rawCond[andIdx+3:])
+	} else if orIdx != -1 {
+		logicOp = "or"
+		leftCond = strings.TrimSpace(rawCond[:orIdx])
+		rightCond = strings.TrimSpace(rawCond[orIdx+2:])
+	} else {
+		leftCond = rawCond
+	}
 
 	body, err := p.parseBlock()
 	if err != nil {
 		return nil, err
 	}
-	return &IfBlock{Condition: cond, Body: body}, nil
+	
+	return &IfBlock{
+		LeftCond:  leftCond,
+		RightCond: rightCond,
+		LogicOp:   logicOp,
+		IsNot:     isNot,
+		Body:      body,
+	}, nil
+}
+
+// Helper to find keyword surrounded by spaces or at start/end
+func findLogicKeyword(s string, keyword string) int {
+	lowerS := strings.ToLower(s)
+	target := " " + keyword + " "
+	
+	// Check middle
+	idx := strings.Index(lowerS, target)
+	if idx != -1 {
+		return idx + 1 // Return index of the keyword itself
+	}
+	
+	// Check start (shouldn't happen if 'not' is handled first, but just in case)
+	if strings.HasPrefix(lowerS, keyword+" ") {
+		return 0
+	}
+	
+	// Check end
+	if strings.HasSuffix(lowerS, " "+keyword) {
+		return len(s) - len(keyword)
+	}
+	
+	return -1
 }
 
 // --- Mod Loader ---
@@ -1317,24 +1387,109 @@ func (t *Translator) translateLoop(loop *LoopBlock, localAliases map[string]stri
 	}
 }
 
+// invertOp returns the logical opposite of a comparison operator
+func invertOp(op string) string {
+	switch op {
+	case "=":
+		return "!="
+	case "!=":
+		return "="
+	case "<":
+		return ">="
+	case ">":
+		return "=<"
+	case "=<":
+		return ">"
+	case ">=":
+		return "<"
+	default:
+		return op // Fallback
+	}
+}
+
+// parseCondition splits "left op right"
+func parseCondition(cond string) (string, string, string) {
+	parts := strings.Fields(cond)
+	if len(parts) == 3 {
+		return parts[0], parts[1], parts[2]
+	}
+	return "", "", ""
+}
+
 func (t *Translator) translateIf(ifBlock *IfBlock, localAliases map[string]string) {
-	funcName := fmt.Sprintf("_if_body_%d", t.LabelCounter)
+	bodyFuncName := fmt.Sprintf("_if_body_%d", t.LabelCounter)
 	t.LabelCounter++
 
-	parts := strings.Fields(ifBlock.Condition)
-	if len(parts) != 3 {
-		fmt.Printf("[Warn] Complex condition '%s' not supported. Skipping.\n", ifBlock.Condition)
-		return
-	}
-	left := parts[0]
-	op := parts[1]
-	right := parts[2]
-
-	t.emit(fmt.Sprintf("jmp %s %s %s cal %s", left, right, op, funcName))
-
-	t.emit(fmt.Sprintf("fnc %s {", funcName))
+	// Define the body function first
+	t.emit(fmt.Sprintf("fnc %s {", bodyFuncName))
 	t.translateBody(ifBlock.Body, localAliases)
 	t.emit("}")
+
+	// Handle Logic
+	if ifBlock.LogicOp == "and" {
+		// AND Logic: Left MUST be true to check Right. Right MUST be true to run Body.
+		
+		// Step 2: Check Right Condition
+		checkRightFunc := fmt.Sprintf("_if_and_right_%d", t.LabelCounter)
+		t.LabelCounter++
+		
+		rLeft, rOp, rRight := parseCondition(ifBlock.RightCond)
+		if ifBlock.IsNot {
+			rOp = invertOp(rOp)
+		}
+		
+		t.emit(fmt.Sprintf("fnc %s {", checkRightFunc))
+		t.emit(fmt.Sprintf("jmp %s %s %s cal %s", rLeft, rRight, rOp, bodyFuncName))
+		t.emit("}")
+		
+		// Step 1: Check Left Condition
+		lLeft, lOp, lRight := parseCondition(ifBlock.LeftCond)
+		if ifBlock.IsNot {
+			lOp = invertOp(lOp)
+		}
+		
+		// If Left is true, jump to check Right. If false, do nothing (exit).
+		t.emit(fmt.Sprintf("jmp %s %s %s cal %s", lLeft, lRight, lOp, checkRightFunc))
+
+	} else if ifBlock.LogicOp == "or" {
+		// OR Logic: If Left is true, run Body. If Left is false, check Right.
+		
+		lLeft, lOp, lRight := parseCondition(ifBlock.LeftCond)
+		rLeft, rOp, rRight := parseCondition(ifBlock.RightCond)
+		
+		if ifBlock.IsNot {
+			lOp = invertOp(lOp)
+			rOp = invertOp(rOp)
+		}
+		
+		// Create a wrapper function to hold the two jumps
+		orCheckFunc := fmt.Sprintf("_if_or_check_%d", t.LabelCounter)
+		t.LabelCounter++
+		
+		t.emit(fmt.Sprintf("fnc %s {", orCheckFunc))
+		// Jump 1: Left Condition -> Body
+		t.emit(fmt.Sprintf("jmp %s %s %s cal %s", lLeft, lRight, lOp, bodyFuncName))
+		// Jump 2: Right Condition -> Body
+		t.emit(fmt.Sprintf("jmp %s %s %s cal %s", rLeft, rRight, rOp, bodyFuncName))
+		t.emit("}")
+		
+		// Call the wrapper
+		t.emit(fmt.Sprintf("cal %s", orCheckFunc))
+
+	} else {
+		// Simple Condition (No AND/OR)
+		lLeft, lOp, lRight := parseCondition(ifBlock.LeftCond)
+		
+		if ifBlock.IsNot {
+			lOp = invertOp(lOp)
+		}
+		
+		if lLeft != "" {
+			t.emit(fmt.Sprintf("jmp %s %s %s cal %s", lLeft, lRight, lOp, bodyFuncName))
+		} else {
+			fmt.Printf("[Warn] Could not parse condition: %s\n", ifBlock.LeftCond)
+		}
+	}
 }
 
 func (t *Translator) emit(instr string) {
@@ -1344,7 +1499,7 @@ func (t *Translator) emit(instr string) {
 // --- Cache Manager ---
 
 type CacheManager struct {
-	SourceDir  string
+	SourceDir   string
 	BytecodeDir string
 }
 
@@ -1376,23 +1531,11 @@ func calculateHash(content string) string {
 // and returns a map of unitName -> sourceCodeSnippet
 func SplitProgramIntoUnits(prog *Program, originalSource string) map[string]string {
 	units := make(map[string]string)
-	
-	// We need to reconstruct the source code for each top-level node.
-	// Since we don't have exact line numbers for the end of blocks easily without more complex parsing,
-	// we will use a simplified approach: 
-	// For Functions/Classes/Entrusts, we can try to extract them from the original source using regex or simple logic.
-	// However, the parser consumes lines. 
-	// A better way for this specific request is to rely on the fact that we parsed them.
-	// But to save to file "as is", we ideally want the original text.
-	
-	// Let's iterate through nodes and generate a canonical representation or try to find it in source.
-	// Given the complexity of extracting exact substrings from the original source with nested braces using the current parser state,
-	// we will generate a canonical source representation for each unit.
-	
+
 	for _, node := range prog.Nodes {
 		var name string
 		var content string
-		
+
 		switch n := node.(type) {
 		case *FunctionDef:
 			name = n.Name
@@ -1404,31 +1547,25 @@ func SplitProgramIntoUnits(prog *Program, originalSource string) map[string]stri
 			content += " {\n"
 			content += reconstructBody(n.Body, 1)
 			content += "}\n"
-			
+
 		case *ClassDef:
 			name = n.Name
 			content = fmt.Sprintf("Class \"%s\" {\n", n.Name)
 			content += reconstructBody(n.Members, 1)
 			content += "}\n"
-			
+
 		case *EntrustBlock:
 			name = fmt.Sprintf("Entrust_%d", n.ID) // Use ID as name for uniqueness if no explicit name
-			// Entrusts don't have names in the syntax provided, so we use a generated name or condition hash?
-			// The prompt says "class name, method name, function name". Entrusts are anonymous.
-			// We'll skip saving Entrusts as individual files unless they have a name, or we use a hash.
-			// Let's assume Entrusts are part of the main flow or handled globally. 
-			// To strictly follow "Function/Class/Method", we might ignore Entrusts for file splitting 
-			// OR treat them as special functions. Let's include them with a generated name.
 			content = fmt.Sprintf("Entrust (%s) {\n", n.Condition)
 			content += reconstructBody(n.Body, 1)
 			content += "}\n"
 		}
-		
+
 		if name != "" {
 			units[name] = content
 		}
 	}
-	
+
 	return units
 }
 
@@ -1436,10 +1573,8 @@ func SplitProgramIntoUnits(prog *Program, originalSource string) map[string]stri
 func reconstructBody(nodes []Node, indentLevel int) string {
 	var sb strings.Builder
 	indent := strings.Repeat("\t", indentLevel)
-	
+
 	for _, node := range nodes {
-		// This is a simplified reconstruction. For full fidelity, we'd need the original lines.
-		// Given the constraints, we generate a readable version.
 		sb.WriteString(indent)
 		sb.WriteString(NodeToString(node, indentLevel))
 		sb.WriteString("\n")
@@ -1449,8 +1584,7 @@ func reconstructBody(nodes []Node, indentLevel int) string {
 
 func NodeToString(n Node, indentLevel int) string {
 	indent := strings.Repeat("\t", indentLevel)
-	// nextIndent := strings.Repeat("\t", indentLevel+1)
-	
+
 	switch v := n.(type) {
 	case *VarDef:
 		return fmt.Sprintf("Data.Var %s %s = \"%s\"", v.VarType, v.Name, v.Value)
@@ -1466,7 +1600,15 @@ func NodeToString(n Node, indentLevel int) string {
 		s += indent + "}"
 		return s
 	case *IfBlock:
-		s := fmt.Sprintf("If(%s) {\n", v.Condition)
+		// Reconstruct If with logic keywords
+		condStr := v.LeftCond
+		if v.LogicOp != "" {
+			condStr = fmt.Sprintf("%s %s %s", v.LeftCond, v.LogicOp, v.RightCond)
+		}
+		if v.IsNot {
+			condStr = "not " + condStr
+		}
+		s := fmt.Sprintf("If(%s) {\n", condStr)
 		s += reconstructBody(v.Body, indentLevel+1)
 		s += indent + "}"
 		return s
@@ -1544,19 +1686,19 @@ func main() {
 
 	// 5. Cache Management Logic
 	cm := NewCacheManager(cacheBaseDir)
-	
+
 	// Split program into units
 	units := SplitProgramIntoUnits(prog, sourceStr)
-	
+
 	hasChanges := false
-	
+
 	// Check each unit against cache
 	for name, unitSource := range units {
 		cachePath := cm.GetSourcePath(name)
-		
+
 		// Calculate hash of current unit
 		currentHash := calculateHash(unitSource)
-		
+
 		// Check if cached file exists
 		cachedContent, err := ioutil.ReadFile(cachePath)
 		if err != nil {
@@ -1567,7 +1709,7 @@ func main() {
 			fmt.Printf("[Cache] New unit detected: %s\n", name)
 			continue
 		}
-		
+
 		// Compare hashes
 		cachedHash := calculateHash(string(cachedContent))
 		if currentHash != cachedHash {
@@ -1579,14 +1721,14 @@ func main() {
 			fmt.Printf("[Cache] Unit unchanged: %s\n", name)
 		}
 	}
-	
+
 	// Determine output bytecode path
 	baseName := filepath.Base(sourceFile)
 	nameWithoutExt := strings.TrimSuffix(baseName, filepath.Ext(baseName))
 	outputBytecodePath := cm.GetBytecodePath(nameWithoutExt)
-	
+
 	var qbCode string
-	
+
 	if !hasChanges {
 		// Check if bytecode exists
 		if _, err := os.Stat(outputBytecodePath); err == nil {
@@ -1602,12 +1744,12 @@ func main() {
 			hasChanges = true
 		}
 	}
-	
+
 	if hasChanges {
 		fmt.Println("[Info] Changes detected or bytecode missing. Translating...")
 		translator := NewTranslatorWithMods(loader)
 		qbCode = translator.Translate(prog)
-		
+
 		// Save Bytecode
 		err = ioutil.WriteFile(outputBytecodePath, []byte(qbCode), 0644)
 		if err != nil {
