@@ -60,8 +60,17 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: [ubuntu-latest, x64, small], artifact: "Qvm"
-          - os: [macos-latest, x64, small], artifact: "Qvm-macOS"
+          # 修复点：将数组和键值对分行写，保持缩进一致
+          - os: 
+              - ubuntu-latest
+              - x64
+              - small
+            artifact: "Qvm"
+          - os: 
+              - macos-latest
+              - x64
+              - small
+            artifact: "Qvm-macOS"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: checkout
@@ -79,7 +88,6 @@ jobs:
         with:
           name: vm-${{ matrix.os[0] }}
           path: dist/${{ matrix.artifact }}
-
   # 4. 打包并自动推送到 GitCode Release
 
   release:
