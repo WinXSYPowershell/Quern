@@ -1,0 +1,124 @@
+name: Quern CI & Cross-Platform Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*' # 当推送 v1.0.0.0 这种 Tag 时触发发布流程
+
+# 权限声明：我们需要 repository 的 write 权限来上传 Release 附件
+permissions:
+  repository: write
+
+jobs:
+  # 1. 测试 Go 翻译器
+  test-translator:
+    name: 测试 Go 翻译器
+    runs-on: [ubuntu-latest, x64, small]
+    steps:
+      - uses: checkout
+      - name: Setup Go
+        uses: setup-go
+        with:
+          go-version: '1.26.4'
+      - name: Run Translator Test
+        run: go run Translator.go --Run Example.q
+  # 2. 交叉编译 Go 翻译器 (全平台)
+  build-translator:
+    name: 交叉编译 Go 翻译器
+    needs: test-translator
+    runs-on: [ubuntu-latest, x64, small]
+    strategy:
+      matrix:
+        include:
+          - { goos: windows, goarch: amd64, artifact: "Quernc.exe" }
+          - { goos: linux, goarch: amd64, artifact: "Quernc-linux" }
+          - { goos: darwin, goarch: amd64, artifact: "Quernc-macOS-amd64" }
+          - { goos: darwin, goarch: arm64, artifact: "Quernc-macOS-arm64" }
+    steps:
+      - uses: checkout
+      - name: Setup Go
+        uses: setup-go
+        with:
+          go-version: '1.21'
+      - name: Build Go Translator
+        env:
+          CGO_ENABLED: 0
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build -trimpath -ldflags="-s -w" -o ${{ matrix.artifact }} translator.go
+      - name: Upload Translator Artifact
+        uses: upload-artifact
+        with:
+          name: translator-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ matrix.artifact }}
+  # 3. 原生编译 Rust 虚拟机 (全平台)
+  build-vm:
+    name: 原生编译 Rust 虚拟机
+    needs: test-translator
+    strategy:
+      matrix:
+        include:
+          - os: [ubuntu-latest, x64, small], artifact: "Qvm"
+          - os: [macos-latest, x64, small], artifact: "Qvm-macOS"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: checkout
+      - name: Setup Rust
+        uses: setup-rust
+        with:
+          toolchain: stable
+      - name: Build Rust VM
+        run: |
+          cargo build --release
+          mkdir -p dist
+          cp target/release/Quern_cargo* dist/${{ matrix.artifact }}
+      - name: Upload VM Artifact
+        uses: upload-artifact
+        with:
+          name: vm-${{ matrix.os[0] }}
+          path: dist/${{ matrix.artifact }}
+
+  # 4. 打包并自动推送到 GitCode Release
+
+  release:
+    name: 发布到 GitCode
+    needs: [build-translator, build-vm]
+    # 只有当推送了 v* 开头的 Tag 时才执行
+    if: startsWith(github.ref, 'refs/tags/') || startsWith(atomgit.ref, 'refs/tags/')
+    runs-on: [ubuntu-latest, x64, small]
+    steps:
+      - name: Download All Artifacts
+        uses: download-artifact
+        with:
+          path: ./release-assets
+          merge-multiple: true
+
+      - name: Zip Release Assets
+        run: zip -r Quern-Full-Package.zip ./release-assets/*
+
+      - name: Upload to GitCode Release
+        env:
+          TAG: ${{ atomgit.ref_name }}
+        run: |
+          REPO="${{ atomgit.repository.full_name }}"
+          FILE_PATH="Quern-Full-Package.zip"
+          
+          echo ">>> 正在向 GitCode 获取 Release ID..."
+          # 1. 获取对应 Tag 的 Release ID
+          RELEASE_ID=$(curl -s -H "Private-Token: ${{ secrets.GITCODE_TOKEN }}" \
+            "https://gitcode.com/api/v5/repos/$REPO/releases/tags/$TAG" | jq -r '.id')
+          
+          if [ "$RELEASE_ID" == "null" ] || [ -z "$RELEASE_ID" ]; then
+            echo "[Error] 无法在 GitCode 找到 Tag: $TAG 对应的 Release"
+            exit 1
+          fi
+          
+          echo ">>> 找到 Release ID: $RELEASE_ID，正在上传附件..."
+          # 2. 上传文件到 GitCode Release
+          curl -X POST -H "Private-Token: ${{ secrets.GITCODE_TOKEN }}" \
+            -F "file=@$FILE_PATH" \
+            "https://gitcode.com/api/v5/repos/$REPO/releases/$RELEASE_ID/attachments"
+          
+          echo ">>> 成功将压缩包推送到 GitCode Release"
