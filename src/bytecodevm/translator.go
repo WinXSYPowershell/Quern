@@ -89,7 +89,7 @@ type IfBlock struct {
 	Body      []Node
 	ElseBody  []Node    // Code block for Else
 	ElseIf    *IfBlock  // Linked list for Else If
-	ElseLoopCount string	// If not empty, the Else body acts as a loop body
+	ElseLoopCount string	// If not empty, the Else body acts as a loop body. "-1" means infinite.
 	LoopCount string    // If not empty, the If/Else body acts as a loop body
 }
 
@@ -792,15 +792,6 @@ func (p *Parser) parseIf(line string) (*IfBlock, error) {
 		lEnd := strings.Index(restAfterCond, ")")
 		if lStart != -1 && lEnd != -1 {
 			loopCount = strings.TrimSpace(restAfterCond[lStart+1 : lEnd])
-			// Adjust position to find the actual opening brace of the If block
-			// We need to skip past "Loop(...)" to find "{"
-			// The parser state (p.pos) is currently at the line with "If...". 
-			// parseBlock will look for "{" in subsequent lines or current line.
-			// Since we are parsing line-by-line in parseStatement, and parseBlock advances p.pos,
-			// we need to ensure parseBlock finds the correct "{".
-			// In this simple parser, parseBlock looks at p.lines[p.pos].
-			// If the line is "If (cond) Loop(5) {", parseBlock sees "{".
-			// If the line is "If (cond) Loop(5)", parseBlock expects next line to be "{".
 		}
 	}
 
@@ -847,8 +838,6 @@ func (p *Parser) parseIf(line string) (*IfBlock, error) {
 	}
 	
 	// Check for Else or Else If immediately following the block
-	// Note: parseBlock consumes the closing "}". The next line(s) might contain Else.
-	// We need to peek ahead without consuming if it's not Else.
 	if p.pos < len(p.lines) {
 		nextLine := strings.TrimSpace(p.lines[p.pos])
 		if strings.HasPrefix(nextLine, "Else") {
@@ -864,11 +853,18 @@ func (p *Parser) parseIf(line string) (*IfBlock, error) {
 			} else if nextLine == "Else" || strings.HasPrefix(nextLine, "Else ") {
 				// Check for Else Loop sugar
 				elseLoopCount := ""
-				if strings.HasPrefix(nextLine, "Else Loop") {
-					lStart := strings.Index(nextLine, "(")
-					lEnd := strings.Index(nextLine, ")")
-					if lStart != -1 && lEnd != -1 {
-						elseLoopCount = strings.TrimSpace(nextLine[lStart+1 : lEnd])
+				
+				// Handle "Else Loop(N)" or "Else Loop (N)"
+				// We need to check if the line contains "Loop"
+				if strings.Contains(nextLine, "Loop") {
+					lStart := strings.Index(nextLine, "Loop")
+					if lStart != -1 {
+						rest := nextLine[lStart:]
+						pStart := strings.Index(rest, "(")
+						pEnd := strings.Index(rest, ")")
+						if pStart != -1 && pEnd != -1 {
+							elseLoopCount = strings.TrimSpace(rest[pStart+1 : pEnd])
+						}
 					}
 				}
 				
@@ -878,19 +874,6 @@ func (p *Parser) parseIf(line string) (*IfBlock, error) {
 					return nil, err
 				}
 				ifBlock.ElseBody = elseBody
-				ifBlock.LoopCount = elseLoopCount // If Else has loop, it applies to Else body? 
-				// Wait, the requirement says: "Else Loop (次数): 如果不满足上面分支的条件，就循环几次"
-				// This implies the Loop applies to the Else Body.
-				// But what if If also has Loop? "If (cond) Loop(N) ... Else Loop(M) ..."
-				// The struct currently has one LoopCount. Let's assume LoopCount applies to the specific branch being parsed.
-				// However, standard If/Else shares the same control flow structure.
-				// To keep it simple and consistent with the request:
-				// If Block has LoopCount, it wraps Body.
-				// Else Block needs its own Loop handling.
-				// Since Else is part of IfBlock, we can't easily store separate loop counts in this flat struct without complexity.
-				// Let's modify: IfBlock.LoopCount applies to IF body.
-				// We need a way to store Else Loop Count.
-				// Let's add ElseLoopCount to IfBlock.
 				ifBlock.ElseLoopCount = elseLoopCount
 			}
 		}
@@ -1506,6 +1489,21 @@ func (t *Translator) executeBodyWithLoop(body []Node, loopCount string, localAli
 		return
 	}
 	
+	// Check for infinite loop (-1)
+	if loopCount == "-1" {
+		// Create a recursive function to simulate infinite loop
+		funcName := fmt.Sprintf("_inf_loop_%d", t.LabelCounter)
+		t.LabelCounter++
+		
+		t.emit(fmt.Sprintf("fnc %s {", funcName))
+		t.translateBody(body, localAliases)
+		t.emit(fmt.Sprintf("cal %s", funcName)) // Recursive call
+		t.emit("}")
+		
+		t.emit(fmt.Sprintf("cal %s", funcName))
+		return
+	}
+	
 	// Create a temporary LoopBlock to reuse existing logic
 	tempLoop := &LoopBlock{
 		Count: loopCount,
@@ -1556,69 +1554,24 @@ func (t *Translator) translateIf(ifBlock *IfBlock, localAliases map[string]strin
 	}
 	
 	// Handle AND/OR logic for the primary condition if needed
-	// Note: The current parseIf splits AND/OR into Left/Right.
-	// If LogicOp is present, we need to evaluate both.
-	// Simplified: If LogicOp is present, we treat it as a combined check.
-	// For QVM jmp, we usually do single comparisons. 
-	// To support AND/OR properly in QVM without complex logic, we might need nested jumps.
-	// However, keeping it simple for now: if LogicOp exists, we might need to generate intermediate checks.
-	// Let's stick to the previous simple implementation for LogicOp, but route the False jump correctly.
-	
 	if ifBlock.LogicOp == "and" {
 		// AND: Left MUST be true to check Right. Right MUST be true to run Body.
-		// If Left False -> Jump to FalseTarget
-		// If Right False -> Jump to FalseTarget
 		
 		checkRightFunc := fmt.Sprintf("_if_and_right_%d", t.LabelCounter)
 		t.LabelCounter++
 		
 		rLeft, rOp, rRight := parseCondition(ifBlock.RightCond)
-		if ifBlock.IsNot { // IsNot applies to the whole expression? Or just right? 
-			// Standard interpretation: Not (A And B) vs (Not A) And B. 
-			// Our parser puts IsNot on the block. Let's assume it inverts the final result or the first part.
-			// Given previous code inverted lOp, let's invert rOp too if IsNot is set? 
-			// Actually, "Not A And B" usually means "(Not A) And B". 
-			// Let's assume IsNot applies to the immediate condition parsed.
+		if ifBlock.IsNot { 
 			rOp = invertOp(rOp)
 		}
 		
 		t.emit(fmt.Sprintf("fnc %s {", checkRightFunc))
 		if falseTargetFunc != "" {
 			t.emit(fmt.Sprintf("jmp %s %s %s cal %s", rLeft, rRight, rOp, bodyFuncName))
-			// If condition fails, fall through to end of function, which returns to caller.
-			// But we want to jump to FalseTarget if available.
-			// QVM jmp only jumps on TRUE. 
-			// So: If True -> Cal Body. If False -> Do nothing (return).
-			// Wait, if we are in a chain, we need to propagate the False.
-			// This requires a more complex structure or passing the falseTarget down.
-			// For simplicity in this artifact, we'll assume simple If/Else without deep AND/OR nesting in Else chains for now, 
-			// or that the FalseTarget is handled by the caller returning.
-			// Actually, if Right is False, we should go to FalseTarget.
-			// Since QVM doesn't have "Jump on False", we can't easily do this inside a function without labels.
-			// We will stick to: If True -> Cal Body. Else -> Return.
-			// The Caller (Left Check) handles the flow.
 		} else {
 			t.emit(fmt.Sprintf("jmp %s %s %s cal %s", rLeft, rRight, rOp, bodyFuncName))
 		}
 		t.emit("}")
-		
-		// Left Check
-		if falseTargetFunc != "" {
-			// If Left is True, Check Right. If Left is False, Go to FalseTarget.
-			// Again, QVM limitation. We can't jump to FalseTarget directly on False.
-			// We can only Jump on True.
-			// Strategy: 
-			// 1. Check Left. If True -> Cal CheckRight.
-			// 2. If Left False -> Fall through.
-			// But how to trigger FalseTarget?
-			// We can't easily do "If False Then Jump".
-			// We must rely on the structure:
-			// If we are at the top level, we just don't call anything if false.
-			// If we are in an Else chain, the previous block called us.
-			
-			// Let's simplify: Only support simple conditions for Else chains in this version to avoid QVM limitations.
-			// Or, assume that if FalseTarget exists, we wrap the whole thing in a function that handles the fallback.
-		}
 		
 		t.emit(fmt.Sprintf("jmp %s %s %s cal %s", lLeft, lRight, lOp, checkRightFunc))
 
@@ -1646,10 +1599,7 @@ func (t *Translator) translateIf(ifBlock *IfBlock, localAliases map[string]strin
 		// Simple Condition
 		if lLeft != "" {
 			if falseTargetFunc != "" {
-				// If True -> Body. If False -> Fall through (which effectively does nothing here).
-				// But we want to execute FalseTarget if False.
-				// Since we can't jump on false, we structure it as:
-				// Call a wrapper that does: If True -> Body. Else -> FalseTarget.
+				// If True -> Body. If False -> Execute Else/ElseIf
 				
 				wrapperFunc := fmt.Sprintf("_if_wrapper_%d", t.LabelCounter)
 				t.LabelCounter++
