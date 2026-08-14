@@ -1086,6 +1086,9 @@ type Translator struct {
 	// Data State for Lists and Dicts
 	Lists map[string][]string
 	Dicts map[string]map[string]string
+	
+	// JS VM for expression evaluation
+	jsVm *goja.Runtime
 }
 
 func NewTranslatorWithMods(loader *ModLoader) *Translator {
@@ -1098,7 +1101,46 @@ func NewTranslatorWithMods(loader *ModLoader) *Translator {
 		Entrusts:     make([]*EntrustBlock, 0),
 		Lists:        make(map[string][]string),
 		Dicts:        make(map[string]map[string]string),
+		jsVm:         goja.New(), // Initialize JS VM for math eval
 	}
+}
+
+// evaluateExpression attempts to calculate numeric expressions using JS engine.
+// If the input is a pure number or a valid math expression (e.g., "1+2", "10*5"), it returns the calculated result as a string.
+// Otherwise, it returns the original string.
+func (t *Translator) evaluateExpression(expr string) string {
+	// Trim whitespace
+	expr = strings.TrimSpace(expr)
+	
+	// Quick check: if it's already a simple number, return it
+	if _, err := strconv.ParseFloat(expr, 64); err == nil {
+		return expr
+	}
+
+	// Check if it looks like a math expression (contains digits and operators)
+	// We allow: 0-9, ., +, -, *, /, %, (, ), space
+	matched, _ := regexp.MatchString(`^[0-9\.\+\-\*\/\%\(\)\s]+$`, expr)
+	if !matched {
+		return expr
+	}
+
+	// Use JS VM to evaluate safely
+	val, err := t.jsVm.RunString(expr)
+	if err != nil {
+		// If evaluation fails, treat it as a literal string
+		return expr
+	}
+
+	// Convert result to string
+	// JS numbers are floats, so we format them nicely
+	floatVal := val.ToFloat()
+	
+	// Check if it's an integer value
+	if floatVal == float64(int64(floatVal)) {
+		return fmt.Sprintf("%d", int64(floatVal))
+	}
+	
+	return fmt.Sprintf("%g", floatVal)
 }
 
 func (t *Translator) Translate(prog *Program) string {
@@ -1200,9 +1242,24 @@ func (t *Translator) translateBody(nodes []Node, localAliases map[string]string)
 		case *VarDef:
 			t.emit(fmt.Sprintf("crt %s", n.Name))
 			val := n.Value
+			
+			// Apply aliases first
 			if v, ok := allAliases[val]; ok {
 				val = v
 			}
+			
+			// NEW: Evaluate numeric expressions if type is Int or Num, or if it looks like math
+			// We attempt evaluation for Int/Num types specifically, or if it's not a known alias/string literal
+			if n.VarType == "Int" || n.VarType == "Num" {
+				val = t.evaluateExpression(val)
+			} else if n.VarType == "Any" {
+				// For Any, we try to see if it's a math expression that should be pre-calculated
+				// Only if it doesn't look like a variable name (starts with letter)
+				if len(val) > 0 && !((val[0] >= 'a' && val[0] <= 'z') || (val[0] >= 'A' && val[0] <= 'Z') || val[0] == '_') {
+					val = t.evaluateExpression(val)
+				}
+			}
+			
 			t.emit(fmt.Sprintf("psh %s %s", n.Name, val))
 
 		case *ListDef:
