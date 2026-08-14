@@ -1,9 +1,9 @@
 # Quern-Lang
 
-![Langs1](https://img.shields.io/badge/lang-Rust-blue.svg)
-![Langs2](https://img.shields.io/badge/lang-Go-blue.svg)
-![Langs2](https://img.shields.io/badge/lang-Javascript-teal.svg)
-![License](https://img.shields.io/badge/license-Apache2.0-green.svg)
+![Langs1](https://img.shields.io/badge/MainLang-Rust-blue.svg)
+![Langs2](https://img.shields.io/badge/MainLang-Go-blue.svg)
+![Langs2](https://img.shields.io/badge/ModuleLang-Javascript-teal.svg)
+![License](https://img.shields.io/badge/License-Apache2.0-green.svg)
 #### Quern：专为商业软件打造的极速脚本引擎。基于 Rust，毫秒级冷启动，4MB 极致轻量。让你的插件系统告别卡顿。
 
 ![Logo](./logo/quern-lang.png)
