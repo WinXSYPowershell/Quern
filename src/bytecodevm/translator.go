@@ -81,16 +81,15 @@ func (l *LoopBlock) Type() string { return "LoopBlock" }
 
 // Modified IfBlock to support Else, ElseIf, and Loop sugar
 type IfBlock struct {
-	LeftCond  string // e.g., "a = 1"
-	RightCond string // e.g., "b = 2" (empty if no logic op)
-	LogicOp   string // "", "and", "or"
-	IsNot     bool   // true if 'not' keyword is present
-	
-	Body      []Node
-	ElseBody  []Node    // Code block for Else
-	ElseIf    *IfBlock  // Linked list for Else If
-	ElseLoopCount string	// If not empty, the Else body acts as a loop body. "-1" means infinite.
-	LoopCount string    // If not empty, the If/Else body acts as a loop body
+	LeftCond      string // e.g., "a = 1"
+	RightCond     string // e.g., "b = 2" (empty if no logic op)
+	LogicOp       string // "", "and", "or"
+	IsNot         bool   // true if 'not' keyword is present
+	Body          []Node
+	ElseBody      []Node    // Code block for Else
+	ElseIf        *IfBlock  // Linked list for Else If
+	ElseLoopCount string    // If not empty, the Else body acts as a loop body. "-1" means infinite.
+	LoopCount     string    // If not empty, the If/Else body acts as a loop body
 }
 
 func (i *IfBlock) Type() string { return "IfBlock" }
@@ -149,17 +148,17 @@ type ListOpEdit struct {
 func (l *ListOpEdit) Type() string { return "ListOpEdit" }
 
 type ListOpFindBool struct {
-	ListName  string
-	Target    string
-	VarName   string
+	ListName string
+	Target   string
+	VarName  string
 }
 
 func (l *ListOpFindBool) Type() string { return "ListOpFindBool" }
 
 type ListOpFindIndex struct {
-	ListName  string
-	Target    string
-	VarName   string
+	ListName string
+	Target   string
+	VarName  string
 }
 
 func (l *ListOpFindIndex) Type() string { return "ListOpFindIndex" }
@@ -463,7 +462,7 @@ func (p *Parser) parseStatement(line string) (Node, error) {
 	if strings.HasPrefix(line, "If") {
 		return p.parseIf(line)
 	}
-	
+
 	// Handle Else/ElseIf at statement level (usually inside parseIf logic, but just in case)
 	if strings.HasPrefix(line, "Else") {
 		// This should ideally be handled within parseIf's block parsing, 
@@ -775,14 +774,14 @@ func (p *Parser) parseLoop(line string) (*LoopBlock, error) {
 // Updated parseIf to support Else, ElseIf, and Loop Sugar
 func (p *Parser) parseIf(line string) (*IfBlock, error) {
 	start := strings.Index(line, "(")
-	end := strings.LastIndex(line, ")") 
-	
+	end := strings.LastIndex(line, ")")
+
 	if start == -1 || end == -1 || end <= start {
 		return nil, fmt.Errorf("Invalid If syntax")
 	}
-	
+
 	rawCond := strings.TrimSpace(line[start+1 : end])
-	
+
 	// Check for Loop Sugar after the closing parenthesis of condition
 	// Example: If (a=1) Loop(5) { ...
 	loopCount := ""
@@ -800,17 +799,17 @@ func (p *Parser) parseIf(line string) (*IfBlock, error) {
 	logicOp := ""
 	leftCond := ""
 	rightCond := ""
-	
+
 	// Check for NOT
 	if strings.HasPrefix(strings.ToLower(rawCond), "not ") {
 		isNot = true
 		rawCond = strings.TrimSpace(rawCond[4:])
 	}
-	
+
 	// Check for AND / OR
 	andIdx := findLogicKeyword(rawCond, "and")
 	orIdx := findLogicKeyword(rawCond, "or")
-	
+
 	if andIdx != -1 {
 		logicOp = "and"
 		leftCond = strings.TrimSpace(rawCond[:andIdx])
@@ -827,7 +826,7 @@ func (p *Parser) parseIf(line string) (*IfBlock, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	ifBlock := &IfBlock{
 		LeftCond:  leftCond,
 		RightCond: rightCond,
@@ -836,13 +835,13 @@ func (p *Parser) parseIf(line string) (*IfBlock, error) {
 		Body:      body,
 		LoopCount: loopCount,
 	}
-	
+
 	// Check for Else or Else If immediately following the block
 	if p.pos < len(p.lines) {
 		nextLine := strings.TrimSpace(p.lines[p.pos])
 		if strings.HasPrefix(nextLine, "Else") {
 			p.pos++ // Consume the Else line
-			
+
 			if strings.HasPrefix(nextLine, "Else If") {
 				// Parse Else If recursively
 				elseIfBlock, err := p.parseIf(nextLine) // Re-use parseIf logic
@@ -853,7 +852,7 @@ func (p *Parser) parseIf(line string) (*IfBlock, error) {
 			} else if nextLine == "Else" || strings.HasPrefix(nextLine, "Else ") {
 				// Check for Else Loop sugar
 				elseLoopCount := ""
-				
+
 				// Handle "Else Loop(N)" or "Else Loop (N)"
 				// We need to check if the line contains "Loop"
 				if strings.Contains(nextLine, "Loop") {
@@ -867,7 +866,7 @@ func (p *Parser) parseIf(line string) (*IfBlock, error) {
 						}
 					}
 				}
-				
+
 				// Parse Else Body
 				elseBody, err := p.parseBlock()
 				if err != nil {
@@ -878,7 +877,7 @@ func (p *Parser) parseIf(line string) (*IfBlock, error) {
 			}
 		}
 	}
-	
+
 	return ifBlock, nil
 }
 
@@ -886,23 +885,23 @@ func (p *Parser) parseIf(line string) (*IfBlock, error) {
 func findLogicKeyword(s string, keyword string) int {
 	lowerS := strings.ToLower(s)
 	target := " " + keyword + " "
-	
+
 	// Check middle
 	idx := strings.Index(lowerS, target)
 	if idx != -1 {
 		return idx + 1 // Return index of the keyword itself
 	}
-	
+
 	// Check start (shouldn't happen if 'not' is handled first, but just in case)
 	if strings.HasPrefix(lowerS, keyword+" ") {
 		return 0
 	}
-	
+
 	// Check end
 	if strings.HasSuffix(lowerS, " "+keyword) {
 		return len(s) - len(keyword)
 	}
-	
+
 	return -1
 }
 
@@ -1071,6 +1070,231 @@ func ProcessIncludes(baseDir string, content string, visited map[string]bool) (s
 	return result.String(), nil
 }
 
+// --- Dead Code Eliminator ---
+
+type DeadCodeEliminator struct {
+	usedFunctions map[string]bool
+	usedClasses   map[string]bool
+	usedVars      map[string]bool
+	usedLists     map[string]bool
+	usedDicts     map[string]bool
+	mainFound     bool
+}
+
+func NewDeadCodeEliminator() *DeadCodeEliminator {
+	return &DeadCodeEliminator{
+		usedFunctions: make(map[string]bool),
+		usedClasses:   make(map[string]bool),
+		usedVars:      make(map[string]bool),
+		usedLists:     make(map[string]bool),
+		usedDicts:     make(map[string]bool),
+	}
+}
+
+// Analyze performs the reachability analysis
+func (dce *DeadCodeEliminator) Analyze(prog *Program) {
+	// 1. Identify Roots: Main Function and All Entrusts
+	for _, node := range prog.Nodes {
+		switch n := node.(type) {
+		case *FunctionDef:
+			if n.IsMain {
+				dce.mainFound = true
+				dce.usedFunctions[n.Name] = true
+				dce.scanBody(n.Body)
+			}
+		case *EntrustBlock:
+			// Entrusts are implicitly called by the VM loop, so they are always "used"
+			dce.scanBody(n.Body)
+		}
+	}
+
+	// If no main found, we might still want to keep global definitions if any, 
+	// but typically Quern scripts need a Main or Entrusts.
+	// If there are no roots, nothing is used.
+}
+
+// scanBody recursively scans nodes for references
+func (dce *DeadCodeEliminator) scanBody(nodes []Node) {
+	for _, node := range nodes {
+		switch n := node.(type) {
+		case *FunctionDef:
+			// Nested function definition? Usually not in this grammar, but if so:
+			// We don't mark it as used unless called, but we scan its body if it WAS called elsewhere.
+			// However, since we are scanning FROM a used function, we just scan the body.
+			dce.scanBody(n.Body)
+		
+		case *ClassDef:
+			dce.scanBody(n.Members)
+
+		case *TemplateUse:
+			dce.usedClasses[n.ClassName] = true
+			// Note: We don't recursively scan the class members here immediately to avoid 
+			// infinite loops if classes reference each other, but since we are doing a simple 
+			// reachability from Main, we should probably scan the class content if it's used.
+			// For simplicity in this pass, we mark it used. A second pass could scan class bodies.
+			
+		case *VarDef:
+			dce.usedVars[n.Name] = true
+
+		case *ListDef:
+			dce.usedLists[n.Name] = true
+			
+		case *DictDef:
+			dce.usedDicts[n.Name] = true
+
+		case *ConsoleInfo:
+			// No definitions to track
+
+		case *LoopBlock:
+			dce.scanBody(n.Body)
+
+		case *IfBlock:
+			dce.scanBody(n.Body)
+			if n.ElseBody != nil {
+				dce.scanBody(n.ElseBody)
+			}
+			if n.ElseIf != nil {
+				// ElseIf is an IfBlock, so we need to scan its body too
+				dce.scanBody(n.ElseIf.Body)
+				if n.ElseIf.ElseBody != nil {
+					dce.scanBody(n.ElseIf.ElseBody)
+				}
+				if n.ElseIf.ElseIf != nil {
+					// Recursive chain handling would be complex, but scanBody handles the immediate body.
+					// Ideally, we should treat ElseIf as a node to scan.
+					dce.scanIfChain(n.ElseIf)
+				}
+			}
+
+		case *ListOpAdd:
+			dce.usedLists[n.ListName] = true
+		case *ListOpDelete:
+			dce.usedLists[n.ListName] = true
+		case *ListOpEdit:
+			dce.usedLists[n.ListName] = true
+		case *ListOpFindBool:
+			dce.usedLists[n.ListName] = true
+			dce.usedVars[n.VarName] = true
+		case *ListOpFindIndex:
+			dce.usedLists[n.ListName] = true
+			dce.usedVars[n.VarName] = true
+
+		case *DictOpAdd:
+			dce.usedDicts[n.DictName] = true
+		case *DictOpDelete:
+			dce.usedDicts[n.DictName] = true
+		case *DictOpEdit:
+			dce.usedDicts[n.DictName] = true
+		case *DictOpFindBool:
+			dce.usedDicts[n.DictName] = true
+			dce.usedVars[n.VarName] = true
+		case *DictOpFindKey:
+			dce.usedDicts[n.DictName] = true
+			dce.usedVars[n.VarName] = true
+
+		case *CustomNode:
+			// Custom nodes might call functions or use variables, 
+			// but without parsing their internal syntax, we can't know.
+			// Conservative approach: assume they might use something, 
+			// or rely on the fact that if the CustomNode is reachable, it's kept.
+		}
+	}
+}
+
+// scanIfChain handles the linked list nature of ElseIf
+func (dce *DeadCodeEliminator) scanIfChain(ifBlock *IfBlock) {
+	if ifBlock == nil {
+		return
+	}
+	dce.scanBody(ifBlock.Body)
+	if ifBlock.ElseBody != nil {
+		dce.scanBody(ifBlock.ElseBody)
+	}
+	if ifBlock.ElseIf != nil {
+		dce.scanIfChain(ifBlock.ElseIf)
+	}
+}
+
+// Filter creates a new Program with only used nodes
+func (dce *DeadCodeEliminator) Filter(prog *Program) *Program {
+	newProg := &Program{
+		Imports: prog.Imports,
+		Nodes:   make([]Node, 0),
+	}
+
+	// First, ensure Classes that are used have their bodies scanned for further dependencies
+	// This is a simplified multi-pass approach.
+	changed := true
+	for changed {
+		changed = false
+		for _, node := range prog.Nodes {
+			if cls, ok := node.(*ClassDef); ok {
+				if dce.usedClasses[cls.Name] {
+					// Check if members introduce new used items
+					// We need to temporarily add them to used sets to see if they trigger more usage?
+					// For now, just scan.
+					dce.scanBody(cls.Members)
+				}
+			}
+		}
+		// In a real compiler, we'd iterate until stable. Here we do one deep scan.
+		break 
+	}
+
+	for _, node := range prog.Nodes {
+		keep := false
+		warnMsg := ""
+
+		switch n := node.(type) {
+		case *FunctionDef:
+			if dce.usedFunctions[n.Name] {
+				keep = true
+			} else {
+				warnMsg = fmt.Sprintf("Unused Function: \"%s\"", n.Name)
+			}
+		case *ClassDef:
+			if dce.usedClasses[n.Name] {
+				keep = true
+			} else {
+				warnMsg = fmt.Sprintf("Unused Class: \"%s\"", n.Name)
+			}
+		case *EntrustBlock:
+			// Always keep Entrusts as they are root entries
+			keep = true
+		case *VarDef:
+			if dce.usedVars[n.Name] {
+				keep = true
+			} else {
+				warnMsg = fmt.Sprintf("Unused Variable: %s", n.Name)
+			}
+		case *ListDef:
+			if dce.usedLists[n.Name] {
+				keep = true
+			} else {
+				warnMsg = fmt.Sprintf("Unused List: \"%s\"", n.Name)
+			}
+		case *DictDef:
+			if dce.usedDicts[n.Name] {
+				keep = true
+			} else {
+				warnMsg = fmt.Sprintf("Unused Dict: \"%s\"", n.Name)
+			}
+		default:
+			// Keep other top-level nodes (Imports, etc.)
+			keep = true
+		}
+
+		if keep {
+			newProg.Nodes = append(newProg.Nodes, node)
+		} else if warnMsg != "" {
+			fmt.Printf("[DCE Warning] %s\n", warnMsg)
+		}
+	}
+
+	return newProg
+}
+
+
 // --- Translator ---
 
 type Translator struct {
@@ -1086,7 +1310,7 @@ type Translator struct {
 	// Data State for Lists and Dicts
 	Lists map[string][]string
 	Dicts map[string]map[string]string
-	
+
 	// JS VM for expression evaluation
 	jsVm *goja.Runtime
 }
@@ -1111,7 +1335,7 @@ func NewTranslatorWithMods(loader *ModLoader) *Translator {
 func (t *Translator) evaluateExpression(expr string) string {
 	// Trim whitespace
 	expr = strings.TrimSpace(expr)
-	
+
 	// Quick check: if it's already a simple number, return it
 	if _, err := strconv.ParseFloat(expr, 64); err == nil {
 		return expr
@@ -1134,12 +1358,12 @@ func (t *Translator) evaluateExpression(expr string) string {
 	// Convert result to string
 	// JS numbers are floats, so we format them nicely
 	floatVal := val.ToFloat()
-	
+
 	// Check if it's an integer value
 	if floatVal == float64(int64(floatVal)) {
 		return fmt.Sprintf("%d", int64(floatVal))
 	}
-	
+
 	return fmt.Sprintf("%g", floatVal)
 }
 
@@ -1242,12 +1466,12 @@ func (t *Translator) translateBody(nodes []Node, localAliases map[string]string)
 		case *VarDef:
 			t.emit(fmt.Sprintf("crt %s", n.Name))
 			val := n.Value
-			
+
 			// Apply aliases first
 			if v, ok := allAliases[val]; ok {
 				val = v
 			}
-			
+
 			// NEW: Evaluate numeric expressions if type is Int or Num, or if it looks like math
 			// We attempt evaluation for Int/Num types specifically, or if it's not a known alias/string literal
 			if n.VarType == "Int" || n.VarType == "Num" {
@@ -1259,7 +1483,7 @@ func (t *Translator) translateBody(nodes []Node, localAliases map[string]string)
 					val = t.evaluateExpression(val)
 				}
 			}
-			
+
 			t.emit(fmt.Sprintf("psh %s %s", n.Name, val))
 
 		case *ListDef:
@@ -1545,22 +1769,22 @@ func (t *Translator) executeBodyWithLoop(body []Node, loopCount string, localAli
 		t.translateBody(body, localAliases)
 		return
 	}
-	
+
 	// Check for infinite loop (-1)
 	if loopCount == "-1" {
 		// Create a recursive function to simulate infinite loop
 		funcName := fmt.Sprintf("_inf_loop_%d", t.LabelCounter)
 		t.LabelCounter++
-		
+
 		t.emit(fmt.Sprintf("fnc %s {", funcName))
 		t.translateBody(body, localAliases)
 		t.emit(fmt.Sprintf("cal %s", funcName)) // Recursive call
 		t.emit("}")
-		
+
 		t.emit(fmt.Sprintf("cal %s", funcName))
 		return
 	}
-	
+
 	// Create a temporary LoopBlock to reuse existing logic
 	tempLoop := &LoopBlock{
 		Count: loopCount,
@@ -1573,7 +1797,7 @@ func (t *Translator) translateIf(ifBlock *IfBlock, localAliases map[string]strin
 	// Generate unique labels/functions for this If chain
 	bodyFuncName := fmt.Sprintf("_if_body_%d", t.LabelCounter)
 	t.LabelCounter++
-	
+
 	// Define the Body Function
 	t.emit(fmt.Sprintf("fnc %s {", bodyFuncName))
 	t.executeBodyWithLoop(ifBlock.Body, ifBlock.LoopCount, localAliases)
@@ -1582,9 +1806,9 @@ func (t *Translator) translateIf(ifBlock *IfBlock, localAliases map[string]strin
 	// Determine where to jump if condition is FALSE
 	// If there is an Else or ElseIf, we jump to that handler.
 	// If there is nothing, we just fall through (do nothing).
-	
+
 	var falseTargetFunc string
-	
+
 	if ifBlock.ElseIf != nil {
 		// Create a wrapper for the ElseIf chain
 		elseIfFuncName := fmt.Sprintf("_if_elseif_%d", t.LabelCounter)
@@ -1605,23 +1829,23 @@ func (t *Translator) translateIf(ifBlock *IfBlock, localAliases map[string]strin
 
 	// Evaluate Condition
 	lLeft, lOp, lRight := parseCondition(ifBlock.LeftCond)
-	
+
 	if ifBlock.IsNot {
 		lOp = invertOp(lOp)
 	}
-	
+
 	// Handle AND/OR logic for the primary condition if needed
 	if ifBlock.LogicOp == "and" {
 		// AND: Left MUST be true to check Right. Right MUST be true to run Body.
-		
+
 		checkRightFunc := fmt.Sprintf("_if_and_right_%d", t.LabelCounter)
 		t.LabelCounter++
-		
+
 		rLeft, rOp, rRight := parseCondition(ifBlock.RightCond)
-		if ifBlock.IsNot { 
+		if ifBlock.IsNot {
 			rOp = invertOp(rOp)
 		}
-		
+
 		t.emit(fmt.Sprintf("fnc %s {", checkRightFunc))
 		if falseTargetFunc != "" {
 			t.emit(fmt.Sprintf("jmp %s %s %s cal %s", rLeft, rRight, rOp, bodyFuncName))
@@ -1629,27 +1853,27 @@ func (t *Translator) translateIf(ifBlock *IfBlock, localAliases map[string]strin
 			t.emit(fmt.Sprintf("jmp %s %s %s cal %s", rLeft, rRight, rOp, bodyFuncName))
 		}
 		t.emit("}")
-		
+
 		t.emit(fmt.Sprintf("jmp %s %s %s cal %s", lLeft, lRight, lOp, checkRightFunc))
 
 	} else if ifBlock.LogicOp == "or" {
 		// OR: If Left True -> Body. If Left False -> Check Right.
 		lLeft, lOp, lRight := parseCondition(ifBlock.LeftCond)
 		rLeft, rOp, rRight := parseCondition(ifBlock.RightCond)
-		
+
 		if ifBlock.IsNot {
 			lOp = invertOp(lOp)
 			rOp = invertOp(rOp)
 		}
-		
+
 		orCheckFunc := fmt.Sprintf("_if_or_check_%d", t.LabelCounter)
 		t.LabelCounter++
-		
+
 		t.emit(fmt.Sprintf("fnc %s {", orCheckFunc))
 		t.emit(fmt.Sprintf("jmp %s %s %s cal %s", lLeft, lRight, lOp, bodyFuncName))
 		t.emit(fmt.Sprintf("jmp %s %s %s cal %s", rLeft, rRight, rOp, bodyFuncName))
 		t.emit("}")
-		
+
 		t.emit(fmt.Sprintf("cal %s", orCheckFunc))
 
 	} else {
@@ -1657,18 +1881,18 @@ func (t *Translator) translateIf(ifBlock *IfBlock, localAliases map[string]strin
 		if lLeft != "" {
 			if falseTargetFunc != "" {
 				// If True -> Body. If False -> Execute Else/ElseIf
-				
+
 				wrapperFunc := fmt.Sprintf("_if_wrapper_%d", t.LabelCounter)
 				t.LabelCounter++
-				
+
 				t.emit(fmt.Sprintf("fnc %s {", wrapperFunc))
 				t.emit(fmt.Sprintf("jmp %s %s %s cal %s", lLeft, lRight, lOp, bodyFuncName))
 				// If jump didn't happen, we are here (False).
 				t.emit(fmt.Sprintf("cal %s", falseTargetFunc))
 				t.emit("}")
-				
+
 				t.emit(fmt.Sprintf("cal %s", wrapperFunc))
-				
+
 			} else {
 				// No Else. Just check.
 				t.emit(fmt.Sprintf("jmp %s %s %s cal %s", lLeft, lRight, lOp, bodyFuncName))
@@ -1795,16 +2019,16 @@ func NodeToString(n Node, indentLevel int) string {
 		if v.IsNot {
 			condStr = "not " + condStr
 		}
-		
+
 		loopSuffix := ""
 		if v.LoopCount != "" {
 			loopSuffix = fmt.Sprintf(" Loop(%s)", v.LoopCount)
 		}
-		
+
 		s := fmt.Sprintf("If(%s)%s {\n", condStr, loopSuffix)
 		s += reconstructBody(v.Body, indentLevel+1)
 		s += indent + "}"
-		
+
 		// Reconstruct Else
 		if v.ElseIf != nil {
 			s += "\n" + indent + NodeToString(v.ElseIf, indentLevel)
@@ -1817,7 +2041,7 @@ func NodeToString(n Node, indentLevel int) string {
 			s += reconstructBody(v.ElseBody, indentLevel+1)
 			s += indent + "}"
 		}
-		
+
 		return s
 	case *CustomNode:
 		return v.RawLine
@@ -1850,18 +2074,27 @@ func NodeToString(n Node, indentLevel int) string {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("Usage: quern-translator --Run <file.q>")
+		fmt.Println("Usage: quern-translator --Run <file.q> [--UnuseDeadCodeEli]")
 		os.Exit(1)
 	}
 
 	if os.Args[1] != "--Run" || len(os.Args) < 3 {
-		fmt.Println("Usage: quern-translator --Run <file.q>")
+		fmt.Println("Usage: quern-translator --Run <file.q> [--UnuseDeadCodeEli]")
 		os.Exit(1)
 	}
 
 	sourceFile := os.Args[2]
 	modDir := "mods"
 	cacheBaseDir := "cache"
+	
+	// Check for Dead Code Elimination flag
+	enableDCE := false
+	for _, arg := range os.Args[3:] {
+		if arg == "--UnuseDeadCodeEli" {
+			enableDCE = true
+			break
+		}
+	}
 
 	// 1. Initialize Mod Loader
 	loader := NewModLoader()
@@ -1891,7 +2124,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 5. Cache Management Logic
+	// 5. Dead Code Elimination
+	if enableDCE {
+		fmt.Println("[Info] Running Dead Code Elimination...")
+		dce := NewDeadCodeEliminator()
+		dce.Analyze(prog)
+		prog = dce.Filter(prog)
+		fmt.Println("[Info] Dead Code Elimination finished.")
+	}
+
+	// 6. Cache Management Logic
 	cm := NewCacheManager(cacheBaseDir)
 
 	// Split program into units
