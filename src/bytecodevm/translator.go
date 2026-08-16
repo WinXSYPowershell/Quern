@@ -2074,12 +2074,12 @@ func NodeToString(n Node, indentLevel int) string {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("Usage: quern-translator --Run <file.q> [--UnuseDeadCodeEli]")
+		fmt.Println("Usage: quern-translator --Run <file.q> [--UnuseDeadCodeEli] [--LgnWarning] [--ForceRep]")
 		os.Exit(1)
 	}
 
 	if os.Args[1] != "--Run" || len(os.Args) < 3 {
-		fmt.Println("Usage: quern-translator --Run <file.q> [--UnuseDeadCodeEli]")
+		fmt.Println("Usage: quern-translator --Run <file.q> [--UnuseDeadCodeEli] [--LgnWarning] [--ForceRep]")
 		os.Exit(1)
 	}
 
@@ -2087,12 +2087,19 @@ func main() {
 	modDir := "mods"
 	cacheBaseDir := "cache"
 	
-	// Check for Dead Code Elimination flag
+	// Flags
 	enableDCE := false
+	ignoreWarnings := false // --LgnWarning
+	forceStrict := false    // --ForceRep (Strict mode: refuse to compile if warnings exist)
+
 	for _, arg := range os.Args[3:] {
-		if arg == "--UnuseDeadCodeEli" {
+		switch arg {
+		case "--UnuseDeadCodeEli":
 			enableDCE = true
-			break
+		case "--LgnWarning":
+			ignoreWarnings = true
+		case "--ForceRep":
+			forceStrict = true
 		}
 	}
 
@@ -2124,11 +2131,47 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 5. Dead Code Elimination
+	// 5. Dead Code Elimination & Warning Check
+	var dce *DeadCodeEliminator
+	
+	// We always analyze for warnings if strict mode or warning output is needed, 
+	// but we only filter (modify AST) if enableDCE is true.
+	dce = NewDeadCodeEliminator()
+	dce.Analyze(prog)
+
+	// Check for issues before proceeding
+	hasWarnings := false
+	
+	// Temporarily capture warnings to decide whether to block execution
+	// We need to know if there ARE unused items, regardless of whether we print them.
+	// The Filter method currently prints. Let's create a check method or modify logic.
+	// For simplicity, we will run a check pass.
+	
+	unusedItems := checkForUnusedItems(dce, prog)
+	if len(unusedItems) > 0 {
+		hasWarnings = true
+	}
+
+	if hasWarnings {
+		if forceStrict {
+			fmt.Println("[Error] Strict Mode (--ForceRep): Unresolved warnings detected. Translation refused.")
+			for _, item := range unusedItems {
+				fmt.Printf("  - %s\n", item)
+			}
+			os.Exit(1)
+		}
+		
+		if !ignoreWarnings {
+			fmt.Println("[Warning] Unused code detected:")
+			for _, item := range unusedItems {
+				fmt.Printf("  - %s\n", item)
+			}
+		}
+	}
+
+	// Apply DCE filtering if enabled
 	if enableDCE {
 		fmt.Println("[Info] Running Dead Code Elimination...")
-		dce := NewDeadCodeEliminator()
-		dce.Analyze(prog)
 		prog = dce.Filter(prog)
 		fmt.Println("[Info] Dead Code Elimination finished.")
 	}
@@ -2219,3 +2262,41 @@ func main() {
 		fmt.Printf("[Runtime Error] QVM execution failed: %v\n", err)
 	}
 }
+
+// checkForUnusedItems performs a dry-run analysis to return a list of warning messages
+// without modifying the program or printing directly.
+func checkForUnusedItems(dce *DeadCodeEliminator, prog *Program) []string {
+	var warnings []string
+
+	for _, node := range prog.Nodes {
+		warnMsg := ""
+		switch n := node.(type) {
+		case *FunctionDef:
+			if !dce.usedFunctions[n.Name] && !n.IsMain {
+				warnMsg = fmt.Sprintf("Unused Function: \"%s\"", n.Name)
+			}
+		case *ClassDef:
+			if !dce.usedClasses[n.Name] {
+				warnMsg = fmt.Sprintf("Unused Class: \"%s\"", n.Name)
+			}
+		case *VarDef:
+			if !dce.usedVars[n.Name] {
+				warnMsg = fmt.Sprintf("Unused Variable: %s", n.Name)
+			}
+		case *ListDef:
+			if !dce.usedLists[n.Name] {
+				warnMsg = fmt.Sprintf("Unused List: \"%s\"", n.Name)
+			}
+		case *DictDef:
+			if !dce.usedDicts[n.Name] {
+				warnMsg = fmt.Sprintf("Unused Dict: \"%s\"", n.Name)
+			}
+		}
+
+		if warnMsg != "" {
+			warnings = append(warnings, warnMsg)
+		}
+	}
+	return warnings
+}
+
