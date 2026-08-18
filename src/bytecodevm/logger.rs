@@ -27,6 +27,10 @@ struct Args {
     #[arg(long)]
     vm_check: Option<String>,
 
+    /// 运行 QB 脚本: Qvm.exe --Run <VMScriptName.qb>
+    #[arg(long)]
+    qvm_run: Option<String>,
+
     /// 启用日志记录
     #[arg(long, default_value_t = false)]
     logs: bool,
@@ -46,12 +50,14 @@ fn main() {
         Some(("VMVerbose", script.clone()))
     } else if let Some(script) = &args.vm_check {
         Some(("VMCheck", script.clone()))
+    } else if let Some(script) = &args.qvm_run {
+        Some(("QvmRun", script.clone()))
     } else {
         None
     };
 
     if operation.is_none() {
-        eprintln!("Error: No operation specified. Use --Run, --VMVerbose, or --VMCheck.");
+        eprintln!("Error: No operation specified. Use --Run, --VMVerbose, --VMCheck, or --QvmRun.");
         std::process::exit(1);
     }
 
@@ -69,6 +75,7 @@ fn main() {
         "Run" => execute_run(&script_name, &trace_id),
         "VMVerbose" => execute_vm_verbose(&script_name, &trace_id),
         "VMCheck" => execute_vm_check(&script_name, &trace_id),
+        "QvmRun" => execute_qvm_run(&script_name, &trace_id),
         _ => Err(format!("Unknown mode: {}", mode)),
     };
 
@@ -135,8 +142,6 @@ fn setup_tracing(enable_logs: bool, mode: &str, trace_id: &str, no_print_trace: 
                     .with_level(true);
                 
                 layers.push(file_layer.boxed());
-                // 注意：这里不能直接 info!，因为 subscriber 还没初始化
-                // 但我们可以在控制台层已经激活的情况下，稍微变通一下，或者仅仅依赖后续日志
             }
             Err(e) => {
                 eprintln!("Failed to create log file: {:?}", e);
@@ -173,10 +178,13 @@ fn execute_qvm(script: &str, extra_args: &[&str], trace_id: &str) -> Result<(), 
     info!(trace_id = trace_id, "Executing Qvm.exe with args: {:?}", extra_args);
     
     let mut cmd = Command::new("Qvm.exe");
+    // 始终添加 --Run 参数
     cmd.arg("--Run");
+    // 添加额外参数 (如 --Verbose, --Check)
     for arg in extra_args {
         cmd.arg(arg);
     }
+    // 最后添加脚本名称
     cmd.arg(script);
 
     let output = cmd.output().map_err(|e| format!("Failed to execute Qvm.exe: {}", e))?;
@@ -206,5 +214,10 @@ fn execute_vm_verbose(script: &str, trace_id: &str) -> Result<(), String> {
 fn execute_vm_check(script: &str, trace_id: &str) -> Result<(), String> {
     execute_quernc(script, trace_id)?;
     execute_qvm(script, &["--Check"], trace_id)?;
+    Ok(())
+}
+
+fn execute_qvm_run(script: &str, trace_id: &str) -> Result<(), String> {
+    execute_qvm(script, &[], trace_id)?;
     Ok(())
 }
