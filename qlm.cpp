@@ -7,6 +7,8 @@
 #include <fstream>
 #include <sstream>
 #include <map>
+#include <regex>
+#include <cctype>
 
 #ifdef _WIN32
     #include <windows.h>
@@ -44,6 +46,8 @@ void printHelp() {
     std::cout << "  --modslist                     List all installed .js files in the local mods folder." << std::endl;
     std::cout << "  --websearch <keyword>          Search for modules in the remote repository by filename." << std::endl;
     std::cout << "  --modssearch <keyword>         Search for modules in the local mods folder by filename." << std::endl;
+    std::cout << "  --NewProject <name>,<ver>      Create a new project with src/main.q and config.toml." << std::endl;
+    std::cout << "  --InstallPackage               Read local .toml and install required packages." << std::endl;
     std::cout << "  --help                         Show this help message." << std::endl;
 }
 
@@ -86,7 +90,6 @@ bool handleMissingGit() {
     if (input == "y" || input == "yes") {
 #ifdef _WIN32
         std::cout << COLOR_CYAN << "[Action] Opening Git download page in browser..." << COLOR_RESET << std::endl;
-        // 使用 ShellExecute 打开默认浏览器
         ShellExecuteA(NULL, "open", "https://git-scm.com/download/win", NULL, NULL, SW_SHOWNORMAL);
         std::cout << "Please install Git, ensure 'Add to PATH' is selected, and restart this tool." << std::endl;
 #else
@@ -94,7 +97,6 @@ bool handleMissingGit() {
         std::string installCmd = "sudo apt update && sudo apt install -y git";
         if (runCommand(installCmd, false)) {
             std::cout << COLOR_GREEN << "[Success] Git installation command executed. Please verify." << COLOR_RESET << std::endl;
-            // 再次检查是否成功
             if (isCommandAvailable("git")) return true;
         } else {
             std::cerr << COLOR_RED << "[Failed] Could not automatically install git. Please install it manually." << COLOR_RESET << std::endl;
@@ -149,7 +151,6 @@ bool ensureGit() {
     }
 #endif
 
-    // 如果自动修复失败，进入交互安装流程
     return handleMissingGit();
 }
 
@@ -214,7 +215,7 @@ bool listWebModules() {
         return false;
     }
 
-    std::vector<std::string> files = searchJsFiles(tempDir, ""); // 空关键字表示全部
+    std::vector<std::string> files = searchJsFiles(tempDir, ""); 
     
     std::cout << COLOR_BOLD << "\nAvailable Modules (.js):" << COLOR_RESET << std::endl;
     if (files.empty()) {
@@ -235,7 +236,6 @@ bool searchWebModules(const std::string& keyword) {
     if (!ensureGit()) return false;
 
     fs::path tempDir = fs::temp_directory_path() / ("qlm_search_temp_" + keyword);
-    // 清理可能存在的旧临时目录
     if (fs::exists(tempDir)) {
         fs::remove_all(tempDir);
     }
@@ -337,7 +337,6 @@ bool installModuleWithGit(const std::string& moduleName) {
         return false;
     }
 
-    // 在克隆的仓库中查找文件
     fs::path sourceFile = tempDirPath / moduleName;
     std::string realFileName = moduleName;
 
@@ -354,7 +353,6 @@ bool installModuleWithGit(const std::string& moduleName) {
         }
     }
 
-    // 复制文件
     fs::path destFile = modsDir / realFileName;
     try {
         fs::copy_file(sourceFile, destFile, fs::copy_options::overwrite_existing);
@@ -468,6 +466,125 @@ bool enableModule(const std::string& moduleName) {
     }
 }
 
+// 功能：--NewProject
+bool createNewProject(const std::string& nameArg, const std::string& verArg) {
+    std::string projectName = nameArg;
+    std::string version = verArg;
+
+    // 清理可能存在的首尾引号
+    auto cleanStr = [](std::string& s) {
+        if (!s.empty() && (s.front() == '"' || s.front() == '\'')) s.erase(0, 1);
+        if (!s.empty() && (s.back() == '"' || s.back() == '\'')) s.pop_back();
+    };
+    cleanStr(projectName);
+    cleanStr(version);
+
+    if (projectName.empty() || version.empty()) {
+        std::cerr << COLOR_RED << "Error: Invalid project name or version." << COLOR_RESET << std::endl;
+        return false;
+    }
+
+    fs::path projDir = fs::path(projectName);
+    if (fs::exists(projDir)) {
+        std::cerr << COLOR_RED << "Error: Directory '" << projectName << "' already exists." << COLOR_RESET << std::endl;
+        return false;
+    }
+
+    try {
+        fs::create_directories(projDir / "src");
+        
+        // 创建 main.q
+        std::ofstream mainQ(projDir / "src" / "main.q");
+        if (!mainQ) throw std::runtime_error("Cannot create main.q");
+        mainQ << "Function \"Main\"() {\n    Console.Info(\"Hello World!\");\n}\n";
+        mainQ.close();
+
+        // 创建 .toml
+        std::string tomlName = projectName + ".toml";
+        std::ofstream tomlFile(projDir / tomlName);
+        if (!tomlFile) throw std::runtime_error("Cannot create .toml");
+        tomlFile << "[edition]\n";
+        tomlFile << "name = " << projectName << "\n";
+        tomlFile << "ver = " << version << "\n\n";
+        tomlFile << "[packages]\n";
+        tomlFile << "# EmptyNow. Format: package_name , need = {package1, package2...}\n";
+        tomlFile.close();
+
+        std::cout << COLOR_GREEN << "Success: Project '" << projectName << "' created." << COLOR_RESET << std::endl;
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << COLOR_RED << "Error creating project: " << e.what() << COLOR_RESET << std::endl;
+        return false;
+    }
+}
+
+// 功能：--InstallPackage
+bool installPackages() {
+    std::string tomlFile = "";
+    for (const auto& entry : fs::directory_iterator(".")) {
+        if (entry.is_regular_file() && entry.path().extension() == ".toml") {
+            tomlFile = entry.path().string();
+            break;
+        }
+    }
+
+    if (tomlFile.empty()) {
+        std::cerr << COLOR_RED << "Error: No .toml configuration file found in the current directory." << COLOR_RESET << std::endl;
+        return false;
+    }
+
+    std::cout << COLOR_CYAN << "Reading configuration from: " << tomlFile << COLOR_RESET << std::endl;
+
+    std::ifstream file(tomlFile);
+    if (!file) {
+        std::cerr << COLOR_RED << "Error: Cannot open " << tomlFile << COLOR_RESET << std::endl;
+        return false;
+    }
+    std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    file.close();
+
+    std::vector<std::string> packages;
+    // 使用正则表达式匹配 need = { ... }
+    std::regex reg(R"(need\s*=\s*\{([^}]*)\})");
+    std::smatch match;
+    if (std::regex_search(content, match, reg)) {
+        std::string pkgStr = match[1].str();
+        std::stringstream ss(pkgStr);
+        std::string item;
+        while (std::getline(ss, item, ',')) {
+            // 去除空白字符和引号
+            item.erase(std::remove_if(item.begin(), item.end(), [](unsigned char c){ return std::isspace(c); }), item.end());
+            item.erase(std::remove(item.begin(), item.end(), '"'), item.end());
+            item.erase(std::remove(item.begin(), item.end(), '\''), item.end());
+            if (!item.empty()) {
+                packages.push_back(item);
+            }
+        }
+    }
+
+    if (packages.empty()) {
+        std::cout << COLOR_YELLOW << "No packages found to install in [packges] section." << COLOR_RESET << std::endl;
+        return true;
+    }
+
+    std::cout << COLOR_BOLD << "Found " << packages.size() << " package(s) to install:" << COLOR_RESET << std::endl;
+    for (const auto& pkg : packages) {
+        std::cout << "  - " << pkg << std::endl;
+    }
+    std::cout << std::endl;
+
+    bool allSuccess = true;
+    for (const auto& pkg : packages) {
+        std::cout << COLOR_CYAN << "Installing package: " << pkg << COLOR_RESET << std::endl;
+        if (!installModuleWithGit(pkg)) {
+            std::cerr << COLOR_RED << "Failed to install package: " << pkg << COLOR_RESET << std::endl;
+            allSuccess = false;
+        }
+    }
+
+    return allSuccess;
+}
+
 int main(int argc, char* argv[]) {
     if (argc < 2) {
         printHelp();
@@ -488,15 +605,18 @@ int main(int argc, char* argv[]) {
     if (action == "--modslist") {
         return listLocalMods() ? 0 : 1;
     }
+    if (action == "--InstallPackage") {
+        return installPackages() ? 0 : 1;
+    }
 
     // 需要参数的命令
-    if (argc < 3) {
+    if (argc < 3 && action != "--NewProject") { 
         std::cerr << COLOR_RED << "Error: Missing argument for " << action << COLOR_RESET << std::endl;
         printHelp();
         return 1;
     }
 
-    std::string moduleName = argv[2];
+    std::string moduleName = (argc >= 3) ? argv[2] : "";
 
     if (action == "--install") {
         result = installModuleWithGit(moduleName) ? 0 : 1;
@@ -510,6 +630,24 @@ int main(int argc, char* argv[]) {
         result = searchWebModules(moduleName) ? 0 : 1;
     } else if (action == "--modssearch") {
         result = searchLocalMods(moduleName) ? 0 : 1;
+    } else if (action == "--NewProject") {
+        std::string nameArg = "", verArg = "";
+        if (argc >= 3) {
+            std::string arg2 = argv[2];
+            size_t commaPos = arg2.find(',');
+            if (commaPos != std::string::npos) {
+                // 格式: "NAME","VER" 或 NAME,VER
+                nameArg = arg2.substr(0, commaPos);
+                verArg = arg2.substr(commaPos + 1);
+            } else {
+                // 格式: NAME VER
+                nameArg = arg2;
+                if (argc >= 4) {
+                    verArg = argv[3];
+                }
+            }
+        }
+        result = createNewProject(nameArg, verArg) ? 0 : 1;
     } else {
         std::cerr << "Unknown action: " << action << std::endl;
         printHelp();
