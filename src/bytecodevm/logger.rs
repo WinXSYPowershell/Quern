@@ -7,13 +7,13 @@ use tracing::{error, info};
 use tracing_subscriber::fmt::time::ChronoLocal;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::Layer; // 必须导入这个 Trait 才能使用 .boxed()
+use tracing_subscriber::Layer; 
 use uuid::Uuid;
 
 /// Quernc 启动器
 #[derive(Parser, Debug)]
 #[command(name = "QuerncLauncher")]
-#[command(about = "A launcher for Quernc and Qvm scripts")]
+#[command(about = "A launcher for Quernc and Qvm scripts with AOT support")]
 struct Args {
     /// 运行脚本: Quernc.exe --Run <ScriptName.q>
     #[arg(long)]
@@ -38,6 +38,40 @@ struct Args {
     /// 不打印 Trace ID 到控制台
     #[arg(long, default_value_t = false)]
     no_print_trace: bool,
+
+    // --- AOT Build Parameters ---
+
+    /// Translate to Clang -Os
+    #[arg(long, default_value_t = false)]
+    aot_clang_o_size: bool,
+
+    /// Translate to Clang -Oz
+    #[arg(long, default_value_t = false)]
+    aot_clang_o_size_best: bool,
+
+    /// Translate to Clang -Og
+    #[arg(long, default_value_t = false)]
+    aot_clang_o_debug: bool,
+
+    /// Translate to Clang -Ofast
+    #[arg(long, default_value_t = false)]
+    aot_clang_ofast: bool,
+
+    /// Translate to Clang -O0
+    #[arg(long, default_value_t = false)]
+    aot_not_o: bool,
+
+    /// C code verbose compilation
+    #[arg(long, default_value_t = false)]
+    aot_c_verbose: bool,
+
+    /// Treat warnings as errors
+    #[arg(long, default_value_t = false)]
+    aot_force_warn: bool,
+
+    /// Suppress warnings
+    #[arg(long, default_value_t = false)]
+    aot_no_warn: bool,
 }
 
 fn main() {
@@ -71,10 +105,12 @@ fn main() {
     info!("Mode: {}, Script: {}", mode, script_name);
 
     // 执行命令
+    // 注意：只有涉及编译的模式（Run, VMVerbose, VMCheck）才需要传递 AOT 参数
+    // QvmRun 通常直接运行字节码，不需要编译参数，但根据架构可能需要调整
     let result = match mode {
-        "Run" => execute_run(&script_name, &trace_id),
-        "VMVerbose" => execute_vm_verbose(&script_name, &trace_id),
-        "VMCheck" => execute_vm_check(&script_name, &trace_id),
+        "Run" => execute_run(&script_name, &trace_id, &args),
+        "VMVerbose" => execute_vm_verbose(&script_name, &trace_id, &args),
+        "VMCheck" => execute_vm_check(&script_name, &trace_id, &args),
         "QvmRun" => execute_qvm_run(&script_name, &trace_id),
         _ => Err(format!("Unknown mode: {}", mode)),
     };
@@ -155,12 +191,42 @@ fn setup_tracing(enable_logs: bool, mode: &str, trace_id: &str, no_print_trace: 
     subscriber.init();
 }
 
-fn execute_quernc(script: &str, trace_id: &str) -> Result<(), String> {
-    info!(trace_id = trace_id, "Executing Quernc.exe");
-    let output = Command::new("Quernc.exe")
-        .arg("--Run")
-        .arg(script)
-        .output()
+/// 执行 Quernc 编译，支持 AOT 参数
+fn execute_quernc(script: &str, trace_id: &str, args: &Args) -> Result<(), String> {
+    info!(trace_id = trace_id, "Executing Quernc.exe with AOT options");
+    
+    let mut cmd = Command::new("Quernc.exe");
+    cmd.arg("--Run").arg(script);
+
+    // 添加 AOT 优化等级参数 (互斥，这里简单按顺序添加，实际 C++ 端应处理最后一个生效或报错)
+    if args.aot_clang_o_size {
+        cmd.arg("--ClangOSize");
+    }
+    if args.aot_clang_o_size_best {
+        cmd.arg("--ClangOSizeBest");
+    }
+    if args.aot_clang_o_debug {
+        cmd.arg("--ClangODebug");
+    }
+    if args.aot_clang_ofast {
+        cmd.arg("--ClangOFAST");
+    }
+    if args.aot_not_o {
+        cmd.arg("--NotO");
+    }
+
+    // 添加其他 AOT 标志
+    if args.aot_c_verbose {
+        cmd.arg("--CVerbose");
+    }
+    if args.aot_force_warn {
+        cmd.arg("--ForceWarn");
+    }
+    if args.aot_no_warn {
+        cmd.arg("--NoWarn");
+    }
+
+    let output = cmd.output()
         .map_err(|e| format!("Failed to execute Quernc.exe: {}", e))?;
 
     if !output.status.success() {
@@ -200,24 +266,26 @@ fn execute_qvm(script: &str, extra_args: &[&str], trace_id: &str) -> Result<(), 
     Ok(())
 }
 
-fn execute_run(script: &str, trace_id: &str) -> Result<(), String> {
-    execute_quernc(script, trace_id)?;
+fn execute_run(script: &str, trace_id: &str, args: &Args) -> Result<(), String> {
+    execute_quernc(script, trace_id, args)?;
     Ok(())
 }
 
-fn execute_vm_verbose(script: &str, trace_id: &str) -> Result<(), String> {
-    execute_quernc(script, trace_id)?;
+fn execute_vm_verbose(script: &str, trace_id: &str, args: &Args) -> Result<(), String> {
+    execute_quernc(script, trace_id, args)?;
     execute_qvm(script, &["--Verbose"], trace_id)?;
     Ok(())
 }
 
-fn execute_vm_check(script: &str, trace_id: &str) -> Result<(), String> {
-    execute_quernc(script, trace_id)?;
+fn execute_vm_check(script: &str, trace_id: &str, args: &Args) -> Result<(), String> {
+    execute_quernc(script, trace_id, args)?;
     execute_qvm(script, &["--Check"], trace_id)?;
     Ok(())
 }
 
 fn execute_qvm_run(script: &str, trace_id: &str) -> Result<(), String> {
+    // 仅运行 Qvm，不带额外参数，除非未来需要扩展
+    // 根据需求：Qvm.exe --Run <VMScriptName.qb>
     execute_qvm(script, &[], trace_id)?;
     Ok(())
 }
