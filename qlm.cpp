@@ -39,18 +39,18 @@ void printHelp() {
     std::cout << "Usage: qlm [options]" << std::endl;
     std::cout << std::endl;
     std::cout << "Options:" << std::endl;
-    std::cout << "  --install <module_name.js>     Download and install a module from GitCode." << std::endl;
-    std::cout << "  --delete <module_name.js>      Delete a module from the mods folder." << std::endl;
-    std::cout << "  --disable <module_name.js>     Move a module to the 'disabled' folder." << std::endl;
-    std::cout << "  --enable <module_name.js>      Move a module from 'disabled' back to 'mods'." << std::endl;
-    std::cout << "  --weblist                      List all available .js files in the remote repository." << std::endl;
-    std::cout << "  --modslist                     List all installed .js files in the local mods folder." << std::endl;
-    std::cout << "  --websearch <keyword>          Search for modules in the remote repository by filename." << std::endl;
-    std::cout << "  --modssearch <keyword>         Search for modules in the local mods folder by filename." << std::endl;
+    std::cout << "  --Install <module_name.js>     Download and install a module from GitCode." << std::endl;
+    std::cout << "  --Delete <module_name.js>      Delete a module from the mods folder." << std::endl;
+    std::cout << "  --Disable <module_name.js>     Move a module to the 'disabled' folder." << std::endl;
+    std::cout << "  --Enable <module_name.js>      Move a module from 'disabled' back to 'mods'." << std::endl;
+    std::cout << "  --WebList                      List all available .js files in the remote repository." << std::endl;
+    std::cout << "  --ModsList                     List all installed .js files in the local mods folder." << std::endl;
+    std::cout << "  --WebSearch <keyword>          Search for modules in the remote repository by filename." << std::endl;
+    std::cout << "  --ModsSearch <keyword>         Search for modules in the local mods folder by filename." << std::endl;
     std::cout << "  --NewProject <name>,<ver>      Create a new project with src/main.q and config.toml." << std::endl;
     std::cout << "  --InstallPackage               Read local .toml and install required packages." << std::endl;
     std::cout << "  --ProjectRun                   Check dependencies, install missing ones, and run the project." << std::endl;
-    std::cout << "  --help                         Show this help message." << std::endl;
+    std::cout << "  --Help                         Show this help message." << std::endl;
 }
 
 // 辅助函数：执行系统命令
@@ -764,14 +764,14 @@ int main(int argc, char* argv[]) {
     int result = 1;
 
     // 不需要参数的命令
-    if (action == "--help") {
+    if (action == "--Help") {
         printHelp();
         return 0;
     }
-    if (action == "--weblist") {
+    if (action == "--WebList") {
         return listWebModules() ? 0 : 1;
     }
-    if (action == "--modslist") {
+    if (action == "--ModsList") {
         return listLocalMods() ? 0 : 1;
     }
     if (action == "--InstallPackage") {
@@ -790,17 +790,17 @@ int main(int argc, char* argv[]) {
 
     std::string moduleName = (argc >= 3) ? argv[2] : "";
 
-    if (action == "--install") {
+    if (action == "--Install") {
         result = installModuleWithGit(moduleName) ? 0 : 1;
-    } else if (action == "--delete") {
+    } else if (action == "--Delete") {
         result = deleteModule(moduleName) ? 0 : 1;
-    } else if (action == "--disable") {
+    } else if (action == "--Disable") {
         result = disableModule(moduleName) ? 0 : 1;
-    } else if (action == "--enable") {
+    } else if (action == "--Enable") {
         result = enableModule(moduleName) ? 0 : 1;
-    } else if (action == "--websearch") {
+    } else if (action == "--WebSearch") {
         result = searchWebModules(moduleName) ? 0 : 1;
-    } else if (action == "--modssearch") {
+    } else if (action == "--ModsSearch") {
         result = searchLocalMods(moduleName) ? 0 : 1;
     } else if (action == "--NewProject") {
         std::string nameArg = "", verArg = "";
