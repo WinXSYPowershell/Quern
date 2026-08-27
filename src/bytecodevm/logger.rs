@@ -1,4 +1,4 @@
-use clap::Parser; // 1
+use clap::Parser;
 use chrono::Local;
 use std::fs;
 use std::path::Path;
@@ -42,6 +42,9 @@ struct Args {
     /// Qlm安装模块的参数
     #[arg(long)]
     module_install: Option<String>,
+
+    #[arg(long)]
+    module_delete: Option<String>,
 
     // --- AOT Build Parameters ---
 
@@ -92,12 +95,14 @@ fn main() {
         Some(("QvmRun", script.clone()))
     } else if let Some(script) = &args.module_install {
         Some(("ModuleInstall", script.clone()))
+    } else if let Some(script) = &args.module_delete {
+        Some(("ModuleDelete", script.clone()))
     } else {
         None
     };
 
     if operation.is_none() {
-        eprintln!("Error: No operation specified. Use --run, --vm-verbose, --vm-check, --module-install, or --qvm-run.");
+        eprintln!("Error: No operation specified. Use --run, --vm-verbose, --vm-check, --module-install, --module-delete, or --qvm-run.");
         std::process::exit(1);
     }
 
@@ -119,6 +124,7 @@ fn main() {
         "VMCheck" => execute_vm_check(&script_name, &trace_id, &args),
         "QvmRun" => execute_qvm_run(&script_name, &trace_id),
         "ModuleInstall" => execute_module_install(&script_name, &trace_id),
+        "ModuleDelete" => execute_module_delete(&script_name, &trace_id),
         _ => Err(format!("Unknown mode: {}", mode)),
     };
 
@@ -302,6 +308,26 @@ fn execute_module_install(module_name: &str, trace_id: &str) -> Result<(), Strin
     
     let mut cmd = Command::new("Qlm.exe");
     cmd.arg("--install").arg(module_name);
+
+    let output = cmd.output()
+        .map_err(|e| format!("Failed to execute Qlm.exe: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        error!(trace_id = trace_id, "Qlm.exe failed: {}", stderr);
+        return Err(format!("Qlm.exe exited with error: {}", stderr));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    info!(trace_id = trace_id, "Qlm.exe output: {}", stdout);
+    Ok(())
+}
+
+fn execute_module_delete(module_name: &str, trace_id: &str) -> Result<(), String> {
+    info!(trace_id = trace_id, "Executing Qlm.exe to delete module: {}", module_name);
+    
+    let mut cmd = Command::new("Qlm.exe");
+    cmd.arg("--delete").arg(module_name);
 
     let output = cmd.output()
         .map_err(|e| format!("Failed to execute Qlm.exe: {}", e))?;
