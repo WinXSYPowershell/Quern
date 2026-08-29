@@ -107,6 +107,8 @@ fn main() {
         Some(("ModuleDelete", script.clone()))
     } else if let Some(script) = &args.module_disable {
         Some(("ModuleDisable", script.clone()))
+    } else if let Some(script) = &args.module_enable {
+        Some(("ModuleEnable", script.clone()))
     } else {
         None
     };
@@ -136,6 +138,7 @@ fn main() {
         "ModuleInstall" => execute_module_install(&script_name, &trace_id),
         "ModuleDelete" => execute_module_delete(&script_name, &trace_id),
         "ModuleDisable" => execute_module_disable(&script_name, &trace_id),
+        "ModuleEnable" => execute_module_enable(&script_name, &trace_id),
         _ => Err(format!("Unknown mode: {}", mode)),
     };
 
@@ -359,6 +362,26 @@ fn execute_module_disable(module_name: &str, trace_id: &str) -> Result<(), Strin
     
     let mut cmd = Command::new("Qlm.exe");
     cmd.arg("--disable").arg(module_name);
+
+    let output = cmd.output()
+        .map_err(|e| format!("Failed to execute Qlm.exe: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        error!(trace_id = trace_id, "Qlm.exe failed: {}", stderr);
+        return Err(format!("Qlm.exe exited with error: {}", stderr));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    info!(trace_id = trace_id, "Qlm.exe output: {}", stdout);
+    Ok(())
+}
+
+fn execute_module_enable(module_name: &str, trace_id: &str) -> Result<(), String> {
+    info!(trace_id = trace_id, "Executing Qlm.exe to enable module: {}", module_name);
+    
+    let mut cmd = Command::new("Qlm.exe");
+    cmd.arg("--enable").arg(module_name);
 
     let output = cmd.output()
         .map_err(|e| format!("Failed to execute Qlm.exe: {}", e))?;
