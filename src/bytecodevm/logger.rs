@@ -54,6 +54,12 @@ struct Args {
     /// Qlm启用模块的参数
     #[arg(long)]
     module_enable: Option<String>,
+
+    /// Qlm网页搜索
+    #[arg(long)]
+    web_search: Option<String>,
+
+
     // --- AOT Build Parameters ---
 
     /// Translate to Clang -Os
@@ -109,12 +115,14 @@ fn main() {
         Some(("ModuleDisable", script.clone()))
     } else if let Some(script) = &args.module_enable {
         Some(("ModuleEnable", script.clone()))
+    } else if let Some(script) = &args.web_search {
+        Some(("WebSearch", script.clone()))
     } else {
         None
     };
 
     if operation.is_none() {
-        eprintln!("Error: No operation specified. Use --run, --vm-verbose, --vm-check, --module-install, --module-delete, --module-disable, --module-enable, or --qvm-run.");
+        eprintln!("Error: No operation specified. Use --run, --vm-verbose, --vm-check, --module-install, --module-delete, --module-disable, --module-enable, --web-list ,--web-search,or --qvm-run.");
         std::process::exit(1);
     }
 
@@ -139,6 +147,7 @@ fn main() {
         "ModuleDelete" => execute_module_delete(&script_name, &trace_id),
         "ModuleDisable" => execute_module_disable(&script_name, &trace_id),
         "ModuleEnable" => execute_module_enable(&script_name, &trace_id),
+        "WebSearch" => execute_web_search(&script_name, &trace_id),
         _ => Err(format!("Unknown mode: {}", mode)),
     };
 
@@ -382,6 +391,26 @@ fn execute_module_enable(module_name: &str, trace_id: &str) -> Result<(), String
     
     let mut cmd = Command::new("Qlm.exe");
     cmd.arg("--enable").arg(module_name);
+
+    let output = cmd.output()
+        .map_err(|e| format!("Failed to execute Qlm.exe: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        error!(trace_id = trace_id, "Qlm.exe failed: {}", stderr);
+        return Err(format!("Qlm.exe exited with error: {}", stderr));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    info!(trace_id = trace_id, "Qlm.exe output: {}", stdout);
+    Ok(())
+}
+
+fn execute_web_search(search_query: &str, trace_id: &str) -> Result<(), String> {
+    info!(trace_id = trace_id, "Executing Qlm.exe to search web modules with query: {}", search_query);
+    
+    let mut cmd = Command::new("Qlm.exe");
+    cmd.arg("--web-search").arg(search_query);
 
     let output = cmd.output()
         .map_err(|e| format!("Failed to execute Qlm.exe: {}", e))?;
