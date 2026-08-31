@@ -59,6 +59,10 @@ struct Args {
     #[arg(long)]
     web_search: Option<String>,
 
+    /// Qlm列出云端模块的参数
+    #[arg(long)]
+    web_list: bool, // 类型是 bool
+
 
     // --- AOT Build Parameters ---
 
@@ -117,6 +121,8 @@ fn main() {
         Some(("ModuleEnable", script.clone()))
     } else if let Some(script) = &args.web_search {
         Some(("WebSearch", script.clone()))
+    } else if args.web_list { // 直接判断布尔值
+        Some(("WebList", "".to_string()))
     } else {
         None
     };
@@ -147,6 +153,7 @@ fn main() {
         "ModuleDelete" => execute_module_delete(&script_name, &trace_id),
         "ModuleDisable" => execute_module_disable(&script_name, &trace_id),
         "ModuleEnable" => execute_module_enable(&script_name, &trace_id),
+        "WebList" => execute_web_list(&script_name, &trace_id),
         "WebSearch" => execute_web_search(&script_name, &trace_id),
         _ => Err(format!("Unknown mode: {}", mode)),
     };
@@ -391,6 +398,46 @@ fn execute_module_enable(module_name: &str, trace_id: &str) -> Result<(), String
     
     let mut cmd = Command::new("Qlm.exe");
     cmd.arg("--enable").arg(module_name);
+
+    let output = cmd.output()
+        .map_err(|e| format!("Failed to execute Qlm.exe: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        error!(trace_id = trace_id, "Qlm.exe failed: {}", stderr);
+        return Err(format!("Qlm.exe exited with error: {}", stderr));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    info!(trace_id = trace_id, "Qlm.exe output: {}", stdout);
+    Ok(())
+}
+
+fn execute_web_list(_script_name: &str, trace_id: &str) -> Result<(), String> {
+    info!(trace_id = trace_id, "Executing Qlm.exe to list cloud modules");
+    
+    let mut cmd = Command::new("Qlm.exe");
+    cmd.arg("--web-list");
+
+    let output = cmd.output()
+        .map_err(|e| format!("Failed to execute Qlm.exe: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        error!(trace_id = trace_id, "Qlm.exe failed: {}", stderr);
+        return Err(format!("Qlm.exe exited with error: {}", stderr));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    info!(trace_id = trace_id, "Qlm.exe output: {}", stdout);
+    Ok(())
+}
+
+fn execute_local_list(_script_name: &str, trace_id: &str) -> Result<(), String> {
+    info!(trace_id = trace_id, "Executing Qlm.exe to list local modules");
+    
+    let mut cmd = Command::new("Qlm.exe");
+    cmd.arg("--mods-list");
 
     let output = cmd.output()
         .map_err(|e| format!("Failed to execute Qlm.exe: {}", e))?;
