@@ -63,6 +63,9 @@ struct Args {
     #[arg(long)]
     web_list: bool, // 类型是 bool
 
+    /// Qlm列出本地模块的参数
+    #[arg(long)]
+    local_list: bool, // 类型是 bool
 
     // --- AOT Build Parameters ---
 
@@ -123,12 +126,14 @@ fn main() {
         Some(("WebSearch", script.clone()))
     } else if args.web_list { // 直接判断布尔值
         Some(("WebList", "".to_string()))
+    } else if args.local_list { // 直接判断布尔值
+        Some(("LocalList", "".to_string()))
     } else {
         None
     };
 
     if operation.is_none() {
-        eprintln!("Error: No operation specified. Use --run, --vm-verbose, --vm-check, --module-install, --module-delete, --module-disable, --module-enable, --web-list ,--web-search,or --qvm-run.");
+        eprintln!("Error: No operation specified. Use --run, --vm-verbose, --vm-check, --module-install, --module-delete, --module-disable, --module-enable, --web-list ,--web-search, --local-list ,or --qvm-run.");
         std::process::exit(1);
     }
 
@@ -154,6 +159,7 @@ fn main() {
         "ModuleDisable" => execute_module_disable(&script_name, &trace_id),
         "ModuleEnable" => execute_module_enable(&script_name, &trace_id),
         "WebList" => execute_web_list(&script_name, &trace_id),
+        "LocalList" => execute_local_list(&script_name, &trace_id),
         "WebSearch" => execute_web_search(&script_name, &trace_id),
         _ => Err(format!("Unknown mode: {}", mode)),
     };
