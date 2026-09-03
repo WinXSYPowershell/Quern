@@ -59,10 +59,6 @@ struct Args {
     #[arg(long)]
     web_search: Option<String>,
 
-    /// Qlm本地搜索
-    #[arg(long)]
-    local_search: Option<String>,
-
     /// Qlm列出云端模块的参数
     #[arg(long)]
     web_list: bool, // 类型是 bool
@@ -70,6 +66,10 @@ struct Args {
     /// Qlm列出本地模块的参数
     #[arg(long)]
     local_list: bool, // 类型是 bool
+
+    /// Qlm安装所有的包
+    #[arg(long)]
+    module_install_all: bool, // 类型是 bool
 
     // --- AOT Build Parameters ---
 
@@ -128,10 +128,10 @@ fn main() {
         Some(("ModuleEnable", script.clone()))
     } else if let Some(script) = &args.web_search {
         Some(("WebSearch", script.clone()))
-    } else if let Some(script) = &args.local_search {
-        Some(("LocalSearch", script.clone()))
     } else if args.web_list { // 直接判断布尔值
         Some(("WebList", "".to_string()))
+    } else if args.module_install_all { // 直接判断布尔值
+        Some(("ModuleInstall", "".to_string()))
     } else if args.local_list { // 直接判断布尔值
         Some(("LocalList", "".to_string()))
     } else {
@@ -139,7 +139,7 @@ fn main() {
     };
 
     if operation.is_none() {
-        eprintln!("Error: No operation specified. Use --run, --vm-verbose, --vm-check, --module-install, --module-delete, --module-disable, --module-enable, --web-list ,--web-search, --local-list, --local-search ,or --qvm-run.");
+        eprintln!("Error: No operation specified. Use --run, --vm-verbose, --vm-check, --module-install, --module-delete, --module-disable, --module-enable, --web-list ,--web-search, --local-list, --module-install ,or --qvm-run.");
         std::process::exit(1);
     }
 
@@ -167,7 +167,7 @@ fn main() {
         "WebList" => execute_web_list(&script_name, &trace_id),
         "LocalList" => execute_local_list(&script_name, &trace_id),
         "WebSearch" => execute_web_search(&script_name, &trace_id),
-        "LocalSearch" => execute_local_search(&script_name, &trace_id),
+        "ModuleInstallAll" => execute_module_install_all(&script_name, &trace_id),
         _ => Err(format!("Unknown mode: {}", mode)),
     };
 
@@ -486,11 +486,11 @@ fn execute_web_search(search_query: &str, trace_id: &str) -> Result<(), String> 
     Ok(())
 }
 
-fn execute_local_search(search_query: &str, trace_id: &str) -> Result<(), String> {
-    info!(trace_id = trace_id, "Executing Qlm.exe to search local modules with query: {}", search_query);
+fn execute_module_install_all(_script_name: &str, trace_id: &str) -> Result<(), String> {
+    info!(trace_id = trace_id, "Executing Qlm.exe to install all modules");
     
     let mut cmd = Command::new("Qlm.exe");
-    cmd.arg("--mods-search").arg(search_query);
+    cmd.arg("--InstallPackage");
 
     let output = cmd.output()
         .map_err(|e| format!("Failed to execute Qlm.exe: {}", e))?;
