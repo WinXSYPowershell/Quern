@@ -29,7 +29,7 @@ Quernc.exe --Run <ScriptName.q>
 ` 代码示例
 ` 基础
 ```quern
-Fn "Main" (Main){
+Function "Main" (Main){
     Console.Info("Hello World!");
 }
 ```
