@@ -29,8 +29,8 @@ Quernc.exe --Run <ScriptName.q>
 ` 代码示例
 ` 基础
 ```quern
-Fn "Main" (MainFn){
-    Print ("Hello World!") > CommandLine
+Fn "Main" (Main){
+    Console.Info("Hello World!");
 }
 ```
 
