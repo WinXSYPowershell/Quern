@@ -522,7 +522,7 @@ func (p *Parser) parseVarDef(line string) (*VarDef, error) {
 	idx++
 
 	value := strings.Join(parts[idx:], " ")
-	value = strings.Trim(value, "\"")
+	// value = strings.Trim(value, "\"")
 
 	return &VarDef{Name: name, Value: value, IsPrivate: isPrivate, VarType: varType}, nil
 }
@@ -534,7 +534,7 @@ func (p *Parser) parseConsoleInfo(line string) (*ConsoleInfo, error) {
 		return nil, fmt.Errorf("Invalid Console.Info syntax")
 	}
 	content := line[start+1 : end]
-	content = strings.Trim(content, "\"")
+	// content = strings.Trim(content, "\"")
 	return &ConsoleInfo{Content: content}, nil
 }
 
@@ -569,7 +569,7 @@ func (p *Parser) parseList(line string) (*ListDef, error) {
 			splitItems := strings.Split(inner, ",")
 			for _, item := range splitItems {
 				item = strings.TrimSpace(item)
-				item = strings.Trim(item, "\"")
+				// item = strings.Trim(item, "\"")
 				if item != "" {
 					items = append(items, item)
 				}
