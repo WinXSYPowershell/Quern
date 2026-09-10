@@ -317,24 +317,50 @@ class CodeGenerator {
 
     std::string generate_instr(const Instruction& instr) const {
         if (instr.type == "crt") return "init_stack(&" + instr.arg1 + ");";
-        if (instr.type == "psh") return "push_stack(&" + instr.arg1 + ", \"" + escape_c_string(instr.arg2) + "\");";
+        
+        // 辅助 lambda：去除首尾引号并转义
+        auto process_string = [](const std::string& s) -> std::string {
+            std::string content = s;
+            // 去除首尾的双引号
+            if (content.size() >= 2 && content.front() == '"' && content.back() == '"') {
+                content = content.substr(1, content.size() - 2);
+            }
+            // 转义剩余的特殊字符
+            std::string result;
+            for (char c : content) {
+                if (c == '"') result += "\\\"";
+                else if (c == '\\') result += "\\\\";
+                else if (c == '\n') result += "\\n";
+                else if (c == '\t') result += "\\t";
+                else result += c;
+            }
+            return result;
+        };
+
+        if (instr.type == "psh") {
+            return "push_stack(&" + instr.arg1 + ", \"" + process_string(instr.arg2) + "\");";
+        }
+        
         if (instr.type == "pop") return "pop_stack(&" + instr.arg1 + ");";
+        
         if (instr.type == "out") {
-            // Check if arg1 is a known stack
             if (stack_names.count(instr.arg1)) {
                 return "print_top(&" + instr.arg1 + ");";
             } else {
-                // Treat as literal string if not a stack (legacy behavior fallback)
-                return "printf(\"%s \", \"" + escape_c_string(instr.arg1) + "\");";
+                // 旧逻辑 fallback
+                return "printf(\"" + process_string(instr.arg1) + "\");";
             }
         }
+        
         if (instr.type == "out_lit") {
-            // New behavior: direct string literal output
-            return "printf(\"%s \", \"" + escape_c_string(instr.arg2) + "\");";
+            // 新逻辑：直接输出字面量，去除外层引号
+            return "printf(\"" + process_string(instr.arg2) + "\");";
         }
+        
         if (instr.type == "otn") return "printf(\"\\n\");";
         if (instr.type == "del") return "free_stack(&" + instr.arg1 + ");";
         if (instr.type == "cal") return instr.arg1 + "();";
+        
         if (instr.type == "jmp") {
             return "if (compare_stacks(&" + instr.arg1 + ", &" + instr.arg2 + ", \"" + instr.arg3 + "\")) " + instr.arg4 + "();";
         }
