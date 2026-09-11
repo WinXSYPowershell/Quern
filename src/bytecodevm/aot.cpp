@@ -315,6 +315,25 @@ class CodeGenerator {
         }
     }
 
+    // Check if the program actually uses any stack operations or comparisons
+    bool needs_stack_support(const Program& prog) const {
+        auto check_instrs = [](const std::vector<Instruction>& instrs) -> bool {
+            for (const auto& instr : instrs) {
+                if (instr.type == "crt" || instr.type == "psh" || instr.type == "pop" || 
+                    instr.type == "del" || instr.type == "jmp") {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        if (check_instrs(prog.instructions)) return true;
+        for (const auto& pair : prog.functions) {
+            if (check_instrs(pair.second)) return true;
+        }
+        return false;
+    }
+
     std::string generate_instr(const Instruction& instr) const {
         if (instr.type == "crt") return "init_stack(&" + instr.arg1 + ");";
         
@@ -464,19 +483,29 @@ public:
     std::string generate(const Program& prog) {
         std::stringstream ss;
         
-        // Collect stack names from all instructions and functions
-        collect_stack_names(prog.instructions);
-        for (const auto& pair : prog.functions) {
-            collect_stack_names(pair.second);
+        bool use_stack = needs_stack_support(prog);
+
+        // Only collect stack names if we actually need them
+        if (use_stack) {
+            collect_stack_names(prog.instructions);
+            for (const auto& pair : prog.functions) {
+                collect_stack_names(pair.second);
+            }
         }
 
-        ss << get_runtime_code();
+        // Always include stdio.h
+        ss << "#include <stdio.h>\n";
         
-        // Global stack variables
-        for (const auto& name : stack_names) {
-            ss << "Stack " << name << ";\n";
+        // Conditionally include runtime support
+        if (use_stack) {
+            ss << get_runtime_code();
+            
+            // Global stack variables
+            for (const auto& name : stack_names) {
+                ss << "Stack " << name << ";\n";
+            }
+            ss << "\n";
         }
-        ss << "\n";
 
         // Forward declarations
         for (const auto& pair : prog.functions) {
@@ -496,16 +525,26 @@ public:
 
         // Main function
         ss << "int main() {\n";
-        for (const auto& name : stack_names) {
-            ss << "    init_stack(&" << name << ");\n";
+        
+        // Initialize stacks only if used
+        if (use_stack) {
+            for (const auto& name : stack_names) {
+                ss << "    init_stack(&" << name << ");\n";
+            }
         }
+
         for (const auto& instr : prog.instructions) {
             std::string code = generate_instr(instr);
             if (!code.empty()) ss << "    " << code << "\n";
         }
-        for (const auto& name : stack_names) {
-            ss << "    free_stack(&" << name << ");\n";
+        
+        // Free stacks only if used
+        if (use_stack) {
+            for (const auto& name : stack_names) {
+                ss << "    free_stack(&" << name << ");\n";
+            }
         }
+        
         ss << "    return 0;\n}\n";
 
         return ss.str();
