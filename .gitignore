@@ -1,2 +1,17 @@
 /target
 .ai-code-tracker.json
+# 编译产物
+*.exe
+*.qb
+*.qb.c
+
+# 缓存目录
+src/tnstr/cache/
+
+# IDE 配置
+Quern.iml
+.vscode/
+
+# 其他临时文件
+build_log.txt
+Todo.txt

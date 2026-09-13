@@ -1,6 +1,6 @@
 # build.ps1
 param(
-    [int]$Version = 1
+    [int]$Version = 2
 )
 
 # 1. 读取 JSON 配置 (原生支持，无需安装模块)
