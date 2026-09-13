@@ -1,4 +1,4 @@
-﻿use clap::Parser;
+use clap::Parser;
 use chrono::Local;
 use std::fs;
 use std::path::Path;
@@ -58,10 +58,6 @@ struct Args {
     /// Qlm search module in cloud repository
     #[arg(long)]
     web_search: Option<String>,
-
-    /// Aot build
-    #[arg(long)]
-    aot_build: Option<String>,
 
     /// Qlm list cloud modules
     #[arg(long)]
@@ -131,8 +127,6 @@ fn main() {
         Some(("ModuleDisable", script.clone()))
     } else if let Some(script) = &args.module_enable {
         Some(("ModuleEnable", script.clone()))
-    } else if let Some(script) = &args.aot_build {
-        Some(("AOTBuild", script.clone()))
     } else if let Some(script) = &args.web_search {
         Some(("WebSearch", script.clone()))
     } else if args.web_list { // 直接判断布尔值
@@ -146,7 +140,7 @@ fn main() {
     };
 
     if operation.is_none() {
-        eprintln!("Error: No operation specified. Use --run, --vm-verbose, --vm-check, --module-install, --module-delete, --module-disable, --module-enable, --web-list ,--web-search, --local-list, --module-install, --aot-build , --help, or --qvm-run.");
+        eprintln!("Error: No operation specified. Use --run, --vm-verbose, --vm-check, --module-install, --module-delete, --module-disable, --module-enable, --web-list ,--web-search, --local-list, --module-install, --help, or --qvm-run.");
         std::process::exit(1);
     }
 
@@ -511,44 +505,5 @@ fn execute_module_install_all(_script_name: &str, trace_id: &str) -> Result<(), 
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     info!(trace_id = trace_id, "Qlm.exe output: {}", stdout);
-    Ok(())
-}
-
-fn execute_aot_build(script: &str, trace_id: &str) -> Result<(), String> {
-    info!(trace_id = trace_id, "Executing AOT build for script: {}", script);
-    
-    // 1. 执行第一条命令：Quernc
-    let mut cmd1 = Command::new("Quernc");
-    cmd1.arg("--Run").arg(script);
-
-    let output1 = cmd1.output()
-        .map_err(|e| format!("Failed to execute Quernc: {}", e))?;
-
-    if !output1.status.success() {
-        let stderr = String::from_utf8_lossy(&output1.stderr);
-        error!(trace_id = trace_id, "Quernc failed: {}", stderr);
-        return Err(format!("Quernc exited with error: {}", stderr));
-    }
-    info!(trace_id = trace_id, "Quernc output: {}", String::from_utf8_lossy(&output1.stdout));
-
-    // 2. 执行第二条命令：QuernBuild.exe
-    let output_path = Path::new("/cache/bytecode").join(script);
-    
-    let mut cmd2 = Command::new("QuernBuild.exe");
-    // 将选项和路径分开作为两个独立的参数传入
-    cmd2.arg("--ClangOSize").arg(output_path);
-
-    let output2 = cmd2.output()
-        .map_err(|e| format!("Failed to execute QuernBuild.exe for AOT build: {}", e))?;
-
-    if !output2.status.success() {
-        let stderr = String::from_utf8_lossy(&output2.stderr);
-        error!(trace_id = trace_id, "QuernBuild.exe AOT build failed: {}", stderr);
-        return Err(format!("QuernBuild.exe AOT build exited with error: {}", stderr));
-    }
-    
-    let stdout = String::from_utf8_lossy(&output2.stdout);
-    info!(trace_id = trace_id, "QuernBuild.exe AOT build output: {}", stdout);
-    
     Ok(())
 }
