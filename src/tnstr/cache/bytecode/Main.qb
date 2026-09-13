@@ -1,0 +1,5 @@
+fnc Main {
+out "Hello World!"
+otn
+}
+cal Main

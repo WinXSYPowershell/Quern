@@ -1,0 +1,25 @@
+{
+  "paths": {
+    "root": "I:/Quern/QuernProj/Quern",
+    "template": "I:/Quern/Quern_Template",
+    "output": "I:/Quern/Output",
+    "versions": "I:/Quern/versions"
+  },
+  "tools": {
+    "go": "F:/Apps/Coding/Go/bin/go.exe",
+    "seven_zip": "D:/7-Zip/7z.exe",
+    "inno_setup": "F:/InnoSetup7/ISCC.exe"
+  },
+  "targets": {
+    "rust_windows": true,
+    "rust_linux": true,
+    "cpp_windows": true,
+    "cpp_linux": true,
+    "go_windows": true,
+    "go_linux": true,
+    "go_macos_arm64": true,
+    "go_macos_amd64": true,
+    "pack_zip": true,
+    "pack_installer": true
+  }
+}
