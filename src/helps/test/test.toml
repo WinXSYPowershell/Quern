@@ -1,6 +1,0 @@
-[edition]
-name = test
-ver = 1
-
-[packages]
-# EmptyNow. Format: package_name , need = {package1, package2...}

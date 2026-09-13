@@ -1,0 +1,16 @@
+# Quern 解释器配置
+interpreter:
+  name: "Quern Enterprise Engine"
+  version: "1.0.0"
+  
+security:
+  max_loop_iterations: 10000 # 防止无限循环
+  enable_sandbox: true       # 启用沙箱隔离
+  
+logging:
+  level: "INFO"              # TRACE, DEBUG, INFO, WARN, ERROR
+  show_trace_id: true        # 是否在日志中显示 Trace ID
+  color_output: true         # 是否启用彩色输出
+
+runtime:
+  default_entry_point: "MainFunction" # 默认主函数名称
