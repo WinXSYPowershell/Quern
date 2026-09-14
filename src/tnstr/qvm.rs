@@ -137,11 +137,18 @@ impl VM {
                 }
                 Instruction::Push(stack_name, (val, is_var)) => {
                     if let Some(stack) = self.stacks.get_mut(stack_name) {
-                        // --- 修改点：处理 Push 的值 ---
+                        // --- 修正点：处理 Push 的值 ---
                         let value_to_push = if *is_var {
                             // 如果是变量，尝试从栈中获取其值
-                            self.get_stack_top(val).unwrap_or_else(|| "is empty!".to_string());
-                            eprintln!("This variable '{}' want to push a empty value, push value: '{}'", val, value_to_push);
+                            let fetched_val = self.get_stack_top(val);
+                            match fetched_val {
+                                Some(v) => v,
+                                None => {
+                                    // 如果变量不存在，压入一个默认值并打印警告
+                                    eprintln!("Warning: Variable '{}' not found, pushing empty string.", val);
+                                    "".to_string()
+                                }
+                            }
                         } else {
                             // 如果不是变量，直接压入字符串
                             val.clone()
@@ -159,9 +166,11 @@ impl VM {
                     }
                 }
                 Instruction::Out((identifier, is_var)) => {
+                    // --- 修正点：处理 Out 的标识符 ---
                     if *is_var {
                         // 如果是变量，先获取变量的值，再把这个值当作栈名去输出
-                        if let Some(var_value) = self.get_stack_top(identifier.clone()) {
+                        // 修正点：传入 &identifier 而不是 identifier.clone()
+                        if let Some(var_value) = self.get_stack_top(identifier) {
                             // 变量的值是另一个栈的名字，输出那个栈的顶部元素
                             if let Some(target_stack) = self.stacks.get(&var_value) {
                                 if let Some(top) = target_stack.last() {
