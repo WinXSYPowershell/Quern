@@ -1,1 +1,1 @@
-include!("tnstr/logger.rs");
+include!("tnstr/qvm.rs");
