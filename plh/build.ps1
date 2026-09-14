@@ -1,6 +1,7 @@
-# build.ps1
+﻿# build.ps1
+# chcp 65001
 param(
-    [int]$Version = 2
+    [int]$Version = 3
 )
 
 # 1. 读取 JSON 配置 (原生支持，无需安装模块)
