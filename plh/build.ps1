@@ -3,26 +3,26 @@ param(
     [int]$Version = 2
 )
 
-# 1. ¶ÁÈ¡ JSON ÅäÖÃ (Ô­ÉúÖ§³Ö£¬ÎŞĞè°²×°Ä£¿é)
+# 1. è¯»å– JSON é…ç½® (åŸç”Ÿæ”¯æŒï¼Œæ— éœ€å®‰è£…æ¨¡å—)
 $ConfigPath = Join-Path $PSScriptRoot "build.json"
 if (-not (Test-Path $ConfigPath)) {
-    Write-Host "[ERROR] ÕÒ²»µ½ÅäÖÃÎÄ¼ş: $ConfigPath" -ForegroundColor Red
+    Write-Host "[ERROR] æ‰¾ä¸åˆ°é…ç½®æ–‡ä»¶: $ConfigPath" -ForegroundColor Red
     
 }
 
-# ¶ÁÈ¡ÎÄ¼şÄÚÈİ²¢×ª»»Îª JSON ¶ÔÏó
+# è¯»å–æ–‡ä»¶å†…å®¹å¹¶è½¬æ¢ä¸º JSON å¯¹è±¡
 $JsonContent = Get-Content -Path $ConfigPath -Raw -Encoding UTF8
 $Config = $JsonContent | ConvertFrom-Json
 
-# 2. ÌáÈ¡ÅäÖÃ½Ú
+# 2. æå–é…ç½®èŠ‚
 $Paths = $Config.paths
 $Tools = $Config.tools
 $Targets = $Config.targets
 
-# 3. ÉèÖÃÈ«¾Ö´íÎóÖĞ¶Ï
+# 3. è®¾ç½®å…¨å±€é”™è¯¯ä¸­æ–­
 $ErrorActionPreference = "Stop"
 
-# 4. ¸¨Öúº¯Êı
+# 4. è¾…åŠ©å‡½æ•°
 function Safe-Move($Source, $Destination) {
     $DestDir = Split-Path -Path $Destination -Parent
     if (-not (Test-Path $DestDir)) {
@@ -33,20 +33,20 @@ function Safe-Move($Source, $Destination) {
 }
 
 function Invoke-BuildStep($Name, $ScriptBlock) {
-    Write-Host "`n>> ¿ªÊ¼: $Name" -ForegroundColor Yellow
+    Write-Host "`n>> å¼€å§‹: $Name" -ForegroundColor Yellow
     try {
         & $ScriptBlock
-        Write-Host ">> Íê³É: $Name" -ForegroundColor Green
+        Write-Host ">> å®Œæˆ: $Name" -ForegroundColor Green
     } catch {
         Write-Host "[FAILED] $Name : $_" -ForegroundColor Red
         
     }
 }
 
-# 5. ºËĞÄ±àÒëÂß¼­
+# 5. æ ¸å¿ƒç¼–è¯‘é€»è¾‘
 Set-Location $Paths.root
 
-# --- Rust ²¿·Ö ---
+# --- Rust éƒ¨åˆ† ---
 if ($Targets.rust_windows) {
     Invoke-BuildStep "Rust (Windows)" { 
         cargo build --release 
@@ -61,7 +61,7 @@ if ($Targets.rust_linux) {
     }
 }
 
-# --- C++ AOT ²¿·Ö ---
+# --- C++ AOT éƒ¨åˆ† ---
 if ($Targets.cpp_windows) {
     Invoke-BuildStep "C++ AOT (Windows)" {
         clang++ src\tnstr\aot.cpp -o QuernBuild.exe -std=c++17 -static -O3 -s -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
@@ -76,13 +76,13 @@ if ($Targets.cpp_linux) {
     }
 }
 
-# --- Go ·­Òë»ú²¿·Ö ---
+# --- Go ç¿»è¯‘æœºéƒ¨åˆ† ---
 $GoBin = $Tools.go
 if ($Targets.go_windows) {
     Invoke-BuildStep "Go (Windows)" {
         $env:CGO_ENABLED="0"; $env:GOOS="windows"; $env:GOARCH="amd64"
         & $GoBin build -trimpath -ldflags="-s -w -buildmode=exe" -o Quernc.exe translator.go
-        # ×¢Òâ£ºÕâÀï¼ÙÉèÄãµÄ UPX Âß¼­£¬Èç¹û²»ĞèÒª¿ÉÒÔÉ¾µôÏÂÃæÕâĞĞ
+        # æ³¨æ„ï¼šè¿™é‡Œå‡è®¾ä½ çš„ UPX é€»è¾‘ï¼Œå¦‚æœä¸éœ€è¦å¯ä»¥åˆ æ‰ä¸‹é¢è¿™è¡Œ
         # & $Tools.seven_zip a "$($Paths.template)\Windows\Quernc.exe.upx" "$($Paths.template)\Windows\Quernc.exe" 
         Safe-Move "Quernc.exe" "$($Paths.template)\Windows\Quernc.exe"
     }
@@ -113,10 +113,10 @@ if ($Targets.go_macos_arm64) {
 # }
 
 
-# --- ĞŞ¸´ºóµÄ QVM ÖØÃüÃûÂß¼­ ---
-$TemplatePath = $Paths.template # ÏÈÌáÈ¡±äÁ¿£¬·½±ãÔÄ¶Á
+# --- ä¿®å¤åçš„ QVM é‡å‘½åé€»è¾‘ ---
+$TemplatePath = $Paths.template # å…ˆæå–å˜é‡ï¼Œæ–¹ä¾¿é˜…è¯»
 
-# 1. °²È«µØÉ¾³ı¾ÉµÄ Qvm.exe (Èç¹û´æÔÚ)
+# 1. å®‰å…¨åœ°åˆ é™¤æ—§çš„ Qvm.exe (å¦‚æœå­˜åœ¨)
 $OldQvmPath = Join-Path $TemplatePath "Qvm.exe"
 if (Test-Path $OldQvmPath) {
     Write-Host "[INFO] Removing old Qvm.exe..." -ForegroundColor Gray
@@ -125,10 +125,10 @@ if (Test-Path $OldQvmPath) {
     Write-Host "[INFO] No old Qvm.exe to remove." -ForegroundColor Gray
 }
 
-# 2. ×¼±¸Ô´ÎÄ¼şÂ·¾¶
+# 2. å‡†å¤‡æºæ–‡ä»¶è·¯å¾„
 $SourceExePath = Join-Path $TemplatePath "Quern_cargo.exe"
 
-# 3. ¼ì²éÔ´ÎÄ¼şÊÇ·ñ´æÔÚ£¬·ÀÖ¹ Move-Item ±ÀÀ£
+# 3. æ£€æŸ¥æºæ–‡ä»¶æ˜¯å¦å­˜åœ¨ï¼Œé˜²æ­¢ Move-Item å´©æºƒ
 if (Test-Path $SourceExePath) {
     Write-Host "[MOVE] Renaming Quern_cargo.exe -> Qvm.exe" -ForegroundColor Cyan
     try {
@@ -141,18 +141,18 @@ if (Test-Path $SourceExePath) {
     Write-Host "[WARNING] Quern_cargo.exe not found at $SourceExePath, skipping Qvm rename." -ForegroundColor Yellow
 }
 
-# --- ´ò°üÓë°²×°³ÌĞò ---
+# --- æ‰“åŒ…ä¸å®‰è£…ç¨‹åº ---
 if ($Targets.pack_zip) {
-    Invoke-BuildStep "´ò°ü ZIP" {
+    Invoke-BuildStep "æ‰“åŒ… ZIP" {
         $ZipPath = "$($Paths.root)\Quern-Linux&Windows-amd64-LSDK.zip"
         & $Tools.seven_zip a $ZipPath "$($Paths.template)\*"
-        & $Tools.seven_zip d $ZipPath "setup.iss" # É¾³ı²»ĞèÒªµÄÎÄ¼ş
+        & $Tools.seven_zip d $ZipPath "setup.iss" # åˆ é™¤ä¸éœ€è¦çš„æ–‡ä»¶
         Safe-Move $ZipPath "$($Paths.versions)\$Version\$(Split-Path $ZipPath -Leaf)"
     }
 }
 
 if ($Targets.pack_installer) {
-    Invoke-BuildStep "Éú³É Inno Setup °²×°°ü" {
+    Invoke-BuildStep "ç”Ÿæˆ Inno Setup å®‰è£…åŒ…" {
         & $Tools.inno_setup /O"$($Paths.output)" "$($Paths.template)\setup.iss"
         $InstallerPath = "$($Paths.output)\Quern-Windows-amd64-LSDK_Installer.exe"
         Safe-Move $InstallerPath "$($Paths.versions)\$Version\$(Split-Path $InstallerPath -Leaf)"
@@ -162,5 +162,5 @@ if ($Targets.pack_installer) {
 Copy-Item -Path "I:\Quern\Quern_Template\Windows\Q*" -Destination "I:\VW\vw_sys\user\deft\Quern" -Force
 Copy-Item -Path "I:\Quern\Quern_Template\Windows\Updater.exe" -Destination "I:\VW\vw_sys\user\deft\Quern" -Force
 
-Write-Host "`n? ËùÓĞÅäÖÃÇı¶¯µÄÈÎÎñÒÑÍê³É£¡°æ±¾: $Version" -ForegroundColor Green
+Write-Host "`n? æ‰€æœ‰é…ç½®é©±åŠ¨çš„ä»»åŠ¡å·²å®Œæˆï¼ç‰ˆæœ¬: $Version" -ForegroundColor Green
 Get-ChildItem -Path "$($Paths.versions)\$version"
