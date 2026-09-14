@@ -7,6 +7,7 @@
 
 # 缓存目录
 src/tnstr/cache/
+test.qb
 
 # IDE 配置
 Quern.iml
