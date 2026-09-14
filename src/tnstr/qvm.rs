@@ -135,9 +135,18 @@ impl VM {
                 Instruction::CreateStack(name) => {
                     self.stacks.entry(name.clone()).or_insert_with(Vec::new);
                 }
-                Instruction::Push(stack_name, value) => {
+                Instruction::Push(stack_name, (val, is_var)) => {
                     if let Some(stack) = self.stacks.get_mut(stack_name) {
-                        stack.push(value.clone());
+                        // --- 修改点：处理 Push 的值 ---
+                        let value_to_push = if *is_var {
+                            // 如果是变量，尝试从栈中获取其值
+                            self.get_stack_top(val).unwrap_or_else(|| "is empty!".to_string());
+                            eprintln!("This variable '{}' want to push a empty value, push value: '{}'", val, value_to_push);
+                        } else {
+                            // 如果不是变量，直接压入字符串
+                            val.clone()
+                        };
+                        stack.push(value_to_push);
                     } else {
                         eprintln!("Runtime Error: Stack '{}' not found", stack_name);
                     }
@@ -149,15 +158,36 @@ impl VM {
                         eprintln!("Runtime Error: Stack '{}' not found", stack_name);
                     }
                 }
-                Instruction::Out(identifier) => {
-                    if let Some(stack) = self.stacks.get(identifier) {
-                        if let Some(top) = stack.last() {
-                            print!("{} ", top);
+                Instruction::Out((identifier, is_var)) => {
+                    if *is_var {
+                        // 如果是变量，先获取变量的值，再把这个值当作栈名去输出
+                        if let Some(var_value) = self.get_stack_top(identifier.clone()) {
+                            // 变量的值是另一个栈的名字，输出那个栈的顶部元素
+                            if let Some(target_stack) = self.stacks.get(&var_value) {
+                                if let Some(top) = target_stack.last() {
+                                    print!("{} ", top);
+                                } else {
+                                    print!("(empty) ");
+                                }
+                            } else {
+                                // 如果变量的值不是一个已知的栈名，直接输出变量的值
+                                print!("{} ", var_value);
+                            }
                         } else {
-                            print!("(empty) ");
+                            // 如果变量本身不存在，输出空
+                            print!("(undefined) ");
                         }
                     } else {
-                        print!("{} ", identifier);
+                        // 如果不是变量，保持原有逻辑
+                        if let Some(stack) = self.stacks.get(identifier) {
+                            if let Some(top) = stack.last() {
+                                print!("{} ", top);
+                            } else {
+                                print!("(empty) ");
+                            }
+                        } else {
+                            print!("{} ", identifier);
+                        }
                     }
                 }
                 Instruction::PrintNewLine => {
