@@ -136,23 +136,20 @@ impl VM {
                     self.stacks.entry(name.clone()).or_insert_with(Vec::new);
                 }
                 Instruction::Push(stack_name, (val, is_var)) => {
-                    if let Some(stack) = self.stacks.get_mut(stack_name) {
-                        // --- 修正点：处理 Push 的值 ---
-                        let value_to_push = if *is_var {
-                            // 如果是变量，尝试从栈中获取其值
-                            let fetched_val = self.get_stack_top(val);
-                            match fetched_val {
-                                Some(v) => v,
-                                None => {
-                                    // 如果变量不存在，压入一个默认值并打印警告
-                                    eprintln!("Warning: Variable '{}' not found, pushing empty string.", val);
-                                    "".to_string()
-                                }
+                    let value_to_push = if *is_var {
+                        let fetched_val = self.get_stack_top(val);
+                        match fetched_val {
+                            Some(v) => v,
+                            None => {
+                                eprintln!("Warning: Variable '{}' not found, pushing empty string.", val);
+                                "".to_string()
                             }
-                        } else {
-                            // 如果不是变量，直接压入字符串
-                            val.clone()
-                        };
+                        }
+                    } else {
+                        val.clone()
+                    };
+                    
+                    if let Some(stack) = self.stacks.get_mut(stack_name) {
                         stack.push(value_to_push);
                     } else {
                         eprintln!("Runtime Error: Stack '{}' not found", stack_name);
