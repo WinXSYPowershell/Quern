@@ -93,9 +93,9 @@ impl ComparisonOp {
 #[derive(Debug, Clone)]
 enum Instruction {
     CreateStack(String),
-    Push(String, String),
+    Push(String, (String, bool)), 
     Pop(String),
-    Out(String),
+    Out((String, bool)), 
     PrintNewLine,
     DeleteStack(String),
     CallFunction(String),
@@ -233,6 +233,9 @@ struct Parser {
 }
 
 impl Parser {
+    fn is_variable(s: &str) -> bool {
+        s.starts_with('@') && s.ends_with('@') && s.len() > 2
+    }
         fn new(input: &str) -> Self {
             let mut tokens = Vec::new();
             let mut line_map = Vec::new();
@@ -320,8 +323,11 @@ impl Parser {
                 "psh" => {
                     self.consume("psh").map_err(|e| self.create_error("MissingArgument", 1001, &cmd))?;
                     let stack = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
-                    let val = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
-                    instructions.push(Instruction::Push(stack, val));
+                    let val_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    let is_var = Self::is_variable(&val_token);
+                    // 如果是变量，去掉前后的 @ 符号；否则保持原样
+                    let val_content = if is_var { val_token[1..val_token.len()-1].to_string() } else { val_token };
+                    instructions.push(Instruction::Push(stack, (val_content, is_var)));
                 }
                 "pop" => {
                     self.consume("pop").map_err(|e| self.create_error("MissingArgument", 1001, &cmd))?;
@@ -330,8 +336,11 @@ impl Parser {
                 }
                 "out" => {
                     self.consume("out").map_err(|e| self.create_error("MissingArgument", 1001, &cmd))?;
-                    let id = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
-                    instructions.push(Instruction::Out(id));
+                    let id_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    
+                    let is_var = Self::is_variable(&id_token);
+                    let id_content = if is_var { id_token[1..id_token.len()-1].to_string() } else { id_token };
+                    instructions.push(Instruction::Out((id_content, is_var)));
                 }
                 "otn" => {
                     self.consume("otn").map_err(|e| self.create_error("ParseError", 1003, &cmd))?;
@@ -430,11 +439,13 @@ impl Parser {
                     let name = self.next_arg()?;
                     block_instrs.push(Instruction::CreateStack(name));
                 }
-                "psh" => {
+"psh" => {
                     self.consume("psh")?;
                     let stack = self.next_arg()?;
-                    let val = self.next_arg()?;
-                    block_instrs.push(Instruction::Push(stack, val));
+                    let val_token = self.next_arg()?;
+                    let is_var = Self::is_variable(&val_token);
+                    let val_content = if is_var { val_token[1..val_token.len()-1].to_string() } else { val_token };
+                    block_instrs.push(Instruction::Push(stack, (val_content, is_var)));
                 }
                 "pop" => {
                     self.consume("pop")?;
@@ -443,8 +454,10 @@ impl Parser {
                 }
                 "out" => {
                     self.consume("out")?;
-                    let id = self.next_arg()?;
-                    block_instrs.push(Instruction::Out(id));
+                    let id_token = self.next_arg()?;
+                    let is_var = Self::is_variable(&id_token);
+                    let id_content = if is_var { id_token[1..id_token.len()-1].to_string() } else { id_token };
+                    block_instrs.push(Instruction::Out((id_content, is_var)));
                 }
                 "otn" => {
                     self.consume("otn")?;
