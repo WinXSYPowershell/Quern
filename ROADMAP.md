@@ -8,8 +8,48 @@
 
 ### 基础功能
 
-- [ ] 添加AOT翻译一条龙（translator.go -> bytecode -> aot.cpp -> c -> exe）
+- [ ] 添加AOT翻译一条龙（translator.go -> bytecode -> aot.cpp -> c -> exe）怎么添加：
+- [ ] 1.加@变量名@作为一个变量识别。
+```quernvm
+crt cunters
+psh cunters "1"
+out @cunters@
+```
+#### 输出
+```bash
+1
+```
 
+- [ ] 2.给psh添加"+"/"-"/"*"/"/"功能
+示例：
+```quernvm
+crt cunters
+psh cunters "1"
+pop cunters
+psh @cunters@ + "5"
+psh @cunters@ - "1"
+psh @cunters@ * "2"
+psh @cunters@ / "2"
+pop cunters
+out @cunters@
+```
+#### 输出
+```bash
+5
+```
+
+- [ ] 3.jmp可以使用变量的功能
+示例：
+```quernvm
+crt cunters
+psh cunters "1"
+
+fnc "loop1"{
+pop cunters
+jmp @cunters@ >= 100
+out "Hello Number:@cunters@"
+}
+```
 ### 1. 热点检测与 AOT 自动触发（当前优先）
 
 - [ ] 设定阈值（建议 10000 次调用或 1000 次循环迭代）
