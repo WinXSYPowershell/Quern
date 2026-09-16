@@ -77,14 +77,14 @@ if ($Targets.rust_linux) {
 if ($Targets.cpp_windows) {
     Invoke-BuildStep "C++ AOT (Windows)" {
         clang++ src\tnstr\aot.cpp -o QuernBuild.exe -std=c++17 -static -O3 -s -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
-        Safe-Move "$($Paths.root)\src\QuernBuild.exe" "$($Paths.template)\Windows\QuernBuild.exe"
+        Safe-Move "$($Paths.root)\QuernBuild.exe" "$($Paths.template)\Windows\QuernBuild.exe"
     }
 }
 
 if ($Targets.cpp_linux) {
     Invoke-BuildStep "C++ AOT (Linux)" {
-        wsl g++ /mnt/i/Quern/QuernProj/Quern/src/tnstr/aot.cpp -o QuernBuild -std=c++17 -static -O3 -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable -g1 -fno-omit-frame-pointer
-        Safe-Move "$($Paths.root)\src\QuernBuild" "$($Paths.template)\Linux\QuernBuild"
+        wsl g++ /mnt/i/Quern/QuernProj/Quern/src/tnstr/aot.cpp -o /mnt/i/Quern/QuernProj/Quern/QuernBuild -std=c++17 -static -O3 -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable -g1 -fno-omit-frame-pointer
+        Safe-Move "$($Paths.root)\QuernBuild" "$($Paths.template)\Linux\QuernBuild"
     }
 }
 
@@ -94,8 +94,6 @@ if ($Targets.go_windows) {
     Invoke-BuildStep "Go (Windows)" {
         $env:CGO_ENABLED="0"; $env:GOOS="windows"; $env:GOARCH="amd64"
         & $GoBin build -trimpath -ldflags="-s -w -buildmode=exe" -o Quernc.exe translator.go
-        # 注意：这里假设你的 UPX 逻辑，如果不需要可以删掉下面这行
-        # & $Tools.seven_zip a "$($Paths.template)\Windows\Quernc.exe.upx" "$($Paths.template)\Windows\Quernc.exe" 
         Safe-Move "Quernc.exe" "$($Paths.template)\Windows\Quernc.exe"
     }
 }
