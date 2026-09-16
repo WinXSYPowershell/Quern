@@ -200,7 +200,6 @@ impl VM {
                         eprintln!("Runtime Error: Stack '{}' not found", stack_name);
                     }
                 }
-                }
                 Instruction::Out((identifier, is_var)) => {
                     // --- 修正点：处理 Out 的标识符 ---
                     if *is_var {
@@ -264,9 +263,6 @@ impl VM {
                         eprintln!("Runtime Error: Could not retrieve values from stacks '{}' or '{}' for jump condition", left_stack, right_stack);
                     }
                 }
-            }
-        }
-    }
 
     fn get_stack_top(&self, stack_name: &str) -> Option<String> {
         self.stacks.get(stack_name).and_then(|s| s.last().cloned())
