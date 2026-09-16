@@ -91,6 +91,26 @@ impl ComparisonOp {
 }
 
 #[derive(Debug, Clone)]
+enum ArithmeticOp {
+    Add,      // +
+    Subtract, // -
+    Multiply, // *
+    Divide,   // /
+}
+
+impl ArithmeticOp {
+    fn from_str(s: &str) -> Result<Self, String> {
+        match s {
+            "+" => Ok(ArithmeticOp::Add),
+            "-" => Ok(ArithmeticOp::Subtract),
+            "*" => Ok(ArithmeticOp::Multiply),
+            "/" => Ok(ArithmeticOp::Divide),
+            _ => Err(format!("Unknown arithmetic operator: {}", s)),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 enum Instruction {
     CreateStack(String),
     Push(String, (String, bool)), 
@@ -104,6 +124,11 @@ enum Instruction {
         right_stack: String,
         op: ComparisonOp,
         target_func: String,
+    },
+    Arithmetic {
+        stack: String,
+        operator: ArithmeticOp,
+        value: String,
     },
 }
 
@@ -223,6 +248,40 @@ impl VM {
                         }
                     } else {
                         eprintln!("Runtime Error: Could not retrieve values from stacks '{}' or '{}' for jump condition", left_stack, right_stack);
+                    }
+                }
+                Instruction::Arithmetic { stack, operator, value } => {
+                    if let Some(stack_data) = self.stacks.get_mut(stack) {
+                        if let Some(top) = stack_data.pop() {
+                            if let (Ok(left), Ok(right)) = (top.parse::<f64>(), value.parse::<f64>()) {
+                                let result = match operator {
+                                    ArithmeticOp::Add => left + right,
+                                    ArithmeticOp::Subtract => left - right,
+                                    ArithmeticOp::Multiply => left * right,
+                                    ArithmeticOp::Divide => {
+                                        if right == 0.0 {
+                                            eprintln!("Runtime Error: Division by zero");
+                                            0.0
+                                        } else {
+                                            left / right
+                                        }
+                                    }
+                                };
+                                // 格式化结果：整数不显示小数点
+                                let result_str = if result.fract() == 0.0 && result.abs() < f64::MAX.exp() {
+                                    format!("{}", result as i64)
+                                } else {
+                                    format!("{}", result)
+                                };
+                                stack_data.push(result_str);
+                            } else {
+                                eprintln!("Runtime Error: Cannot perform arithmetic on non-numeric values");
+                            }
+                        } else {
+                            eprintln!("Runtime Error: Stack '{}' is empty", stack);
+                        }
+                    } else {
+                        eprintln!("Runtime Error: Stack '{}' not found", stack);
                     }
                 }
             }
@@ -358,12 +417,36 @@ impl Parser {
                 }
                 "psh" => {
                     self.consume("psh").map_err(|e| self.create_error("MissingArgument", 1001, &cmd))?;
-                    let stack = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
-                    let val_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
-                    let is_var = Self::is_variable(&val_token);
-                    // 如果是变量，去掉前后的 @ 符号；否则保持原样
-                    let val_content = if is_var { val_token[1..val_token.len()-1].to_string() } else { val_token };
-                    instructions.push(Instruction::Push(stack, (val_content, is_var)));
+                    let stack_ref = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    // 检查下一个token是否是运算符
+                    let next_token = if self.pos < self.tokens.len() {
+                        self.tokens[self.pos].clone()
+                    } else {
+                        String::new()
+                    };
+                    
+                    if next_token == "+" || next_token == "-" || next_token == "*" || next_token == "/" {
+                        // 算术运算模式: psh stack_ref operator value
+                        let op_str = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                        let val_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                        let op = ArithmeticOp::from_str(&op_str).map_err(|e| {
+                            self.create_error("InvalidOperator", 1006, &op_str).to_string()
+                        })?;
+                        // 如果是变量引用，去掉@符号得到栈名
+                        let stack_name = if Self::is_variable(&stack_ref) {
+                            stack_ref[1..stack_ref.len()-1].to_string()
+                        } else {
+                            stack_ref
+                        };
+                        instructions.push(Instruction::Arithmetic { stack: stack_name, operator: op, value: val_token });
+                    } else {
+                        // 普通push模式
+                        let val_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                        let is_var = Self::is_variable(&val_token);
+                        // 如果是变量，去掉前后的 @ 符号；否则保持原样
+                        let val_content = if is_var { val_token[1..val_token.len()-1].to_string() } else { val_token };
+                        instructions.push(Instruction::Push(stack_ref, (val_content, is_var)));
+                    }
                 }
                 "pop" => {
                     self.consume("pop").map_err(|e| self.create_error("MissingArgument", 1001, &cmd))?;
@@ -477,11 +560,35 @@ impl Parser {
                 }
 "psh" => {
                     self.consume("psh")?;
-                    let stack = self.next_arg()?;
-                    let val_token = self.next_arg()?;
-                    let is_var = Self::is_variable(&val_token);
-                    let val_content = if is_var { val_token[1..val_token.len()-1].to_string() } else { val_token };
-                    block_instrs.push(Instruction::Push(stack, (val_content, is_var)));
+                    let stack_ref = self.next_arg()?;
+                    // 检查下一个token是否是运算符
+                    let next_token = if self.pos < self.tokens.len() {
+                        self.tokens[self.pos].clone()
+                    } else {
+                        String::new()
+                    };
+                    
+                    if next_token == "+" || next_token == "-" || next_token == "*" || next_token == "/" {
+                        // 算术运算模式: psh stack_ref operator value
+                        let op_str = self.next_arg()?;
+                        let val_token = self.next_arg()?;
+                        let op = ArithmeticOp::from_str(&op_str).map_err(|_| {
+                            self.create_error("InvalidOperator", 1006, &op_str)
+                        })?;
+                        // 如果是变量引用，去掉@符号得到栈名
+                        let stack_name = if Self::is_variable(&stack_ref) {
+                            stack_ref[1..stack_ref.len()-1].to_string()
+                        } else {
+                            stack_ref
+                        };
+                        block_instrs.push(Instruction::Arithmetic { stack: stack_name, operator: op, value: val_token });
+                    } else {
+                        // 普通push模式
+                        let val_token = self.next_arg()?;
+                        let is_var = Self::is_variable(&val_token);
+                        let val_content = if is_var { val_token[1..val_token.len()-1].to_string() } else { val_token };
+                        block_instrs.push(Instruction::Push(stack_ref, (val_content, is_var)));
+                    }
                 }
                 "pop" => {
                     self.consume("pop")?;
