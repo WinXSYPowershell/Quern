@@ -169,6 +169,7 @@ impl VM {
                     } else {
                         eprintln!("Runtime Error: Stack '{}' not found", stack_name);
                     }
+                }
                 Instruction::PushExpr(stack_name, op, rhs_value) => {
                     // 获取栈顶值（如果栈为空则使用"0"）
                     let top_val = self.get_stack_top(stack_name).unwrap_or_else(|| "0".to_string());
