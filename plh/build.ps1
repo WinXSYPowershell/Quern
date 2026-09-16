@@ -50,11 +50,11 @@ Set-Location $Paths.root
 # --- Rust 部分 ---
 if ($Targets.rust_windows) {
     Invoke-BuildStep "Rust (Windows) Quern Launcher & Qvm" { 
-        Save-Move "$($Paths.root)\buildtargets\1\main.rs" "$($Paths.root)\src\main.rs"
+        Move-Item "$($Paths.root)\buildtargets\1\main.rs" "$($Paths.root)\src\main.rs" -Force
         cargo build --release 
         Safe-Move "$($Paths.root)\target\release\Quern_cargo.exe" "$($Paths.template)\Windows\Qvm.exe"
 
-        Save-Move "$($Paths.root)\buildtargets\2\main.rs" "$($Paths.root)\src\main.rs"
+        Move-Item "$($Paths.root)\buildtargets\2\main.rs" "$($Paths.root)\src\main.rs" -Force
         cargo build --release 
         Safe-Move "$($Paths.root)\target\release\Quern_cargo.exe" "$($Paths.template)\Windows\Quern.exe"
     }
@@ -63,11 +63,11 @@ if ($Targets.rust_windows) {
 
 if ($Targets.rust_linux) {
     Invoke-BuildStep "Rust (Linux) Quern Launcher & Qvm" { 
-        Save-Move "$($Paths.root)\buildtargets\1\main.rs" "$($Paths.root)\src\main.rs"
+        Move-Item "$($Paths.root)\buildtargets\1\main.rs" "$($Paths.root)\src\main.rs" -Force
         wsl cargo build --release 
         Safe-Move "$($Paths.root)\target\release\Quern_cargo.exe" "$($Paths.template)\Windows\Qvm.exe"
 
-        Save-Move "$($Paths.root)\buildtargets\2\main.rs" "$($Paths.root)\src\main.rs"
+        Move-Item "$($Paths.root)\buildtargets\2\main.rs" "$($Paths.root)\src\main.rs" -Force
         wsl cargo build --release 
         Safe-Move "$($Paths.root)\target\release\Quern_cargo.exe" "$($Paths.template)\Windows\Quern.exe"
     }
