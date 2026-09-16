@@ -17,9 +17,15 @@ struct SyntaxError {
 
 impl fmt::Display for SyntaxError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "SyntaxError [{}]: {} (code: {})", self.name, self.message, self.code)
+        write!(
+            f,
+            "SyntaxError [{}]: code={}, line={}, token='{}', source='{}'",
+            self.error_name, self.error_code, self.line_number, self.token_content, self.source_line
+        )
     }
 }
+
+impl std::error::Error for SyntaxError {}
 
 
 impl SyntaxError {
@@ -437,8 +443,8 @@ impl Parser {
                         // 算术运算模式: psh stack_ref operator value
                         let op_str = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
                         let val_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
-                        let op = ArithmeticOp::from_str(&op_str).map_err(|e| {
-                            self.create_error("InvalidOperator", 1006, &op_str).to_string()
+                        let op = ArithmeticOp::from_str(&op_str).map_err(|_| {
+                            self.create_error("InvalidOperator", 1006, &op_str)
                         })?;
                         // 如果是变量引用，去掉@符号得到栈名
                         let stack_name = if Self::is_variable(&stack_ref) {
@@ -581,7 +587,7 @@ impl Parser {
                         let op_str = self.next_arg()?;
                         let val_token = self.next_arg()?;
                         let op = ArithmeticOp::from_str(&op_str).map_err(|_| {
-                            self.create_error("InvalidOperator", 1006, &op_str)
+                            self.create_error("InvalidOperator", 1006, &op_str).to_string()
                         })?;
                         // 如果是变量引用，去掉@符号得到栈名
                         let stack_name = if Self::is_variable(&stack_ref) {

@@ -9,16 +9,6 @@
 ### 基础功能
 
 - [ ] 添加AOT翻译一条龙（translator.go -> bytecode -> aot.cpp -> c -> exe）怎么添加：
-- [ ] 1.加@变量名@作为一个变量识别。
-```quernvm
-crt cunters
-psh cunters "1"
-out @cunters@
-```
-#### 输出
-```bash
-1
-```
 
 - [ ] 2.给psh添加"+"/"-"/"*"/"/"功能
 示例：
