@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::process;
+use std::fmt;
 
 // --- Error Handling Structures ---
 
@@ -13,6 +14,13 @@ struct SyntaxError {
     source_line: String,
     token_content: String, // The specific token causing the error
 }
+
+impl fmt::Display for SyntaxError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "SyntaxError [{}]: {} (code: {})", self.name, self.message, self.code)
+    }
+}
+
 
 impl SyntaxError {
     fn format_normal(&self, filename: &str) -> String {
