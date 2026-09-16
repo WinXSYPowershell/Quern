@@ -93,15 +93,17 @@ impl ComparisonOp {
 #[derive(Debug, Clone)]
 enum Instruction {
     CreateStack(String),
-    Push(String, String),
+    Push(String, (String, bool)), 
     Pop(String),
-    Out(String),
+    Out((String, bool)), 
     PrintNewLine,
     DeleteStack(String),
     CallFunction(String),
     ConditionalJump {
         left_stack: String,
+        left_is_var: bool,
         right_stack: String,
+        right_is_var: bool,
         op: ComparisonOp,
         target_func: String,
     },
@@ -135,9 +137,22 @@ impl VM {
                 Instruction::CreateStack(name) => {
                     self.stacks.entry(name.clone()).or_insert_with(Vec::new);
                 }
-                Instruction::Push(stack_name, value) => {
+                Instruction::Push(stack_name, (val, is_var)) => {
+                    let value_to_push = if *is_var {
+                        let fetched_val = self.get_stack_top(val);
+                        match fetched_val {
+                            Some(v) => v,
+                            None => {
+                                eprintln!("Warning: Variable '{}' not found, pushing empty string.", val);
+                                "".to_string()
+                            }
+                        }
+                    } else {
+                        val.clone()
+                    };
+                    
                     if let Some(stack) = self.stacks.get_mut(stack_name) {
-                        stack.push(value.clone());
+                        stack.push(value_to_push);
                     } else {
                         eprintln!("Runtime Error: Stack '{}' not found", stack_name);
                     }
@@ -149,15 +164,41 @@ impl VM {
                         eprintln!("Runtime Error: Stack '{}' not found", stack_name);
                     }
                 }
-                Instruction::Out(identifier) => {
-                    if let Some(stack) = self.stacks.get(identifier) {
-                        if let Some(top) = stack.last() {
-                            print!("{} ", top);
+                Instruction::Out((identifier, is_var)) => {
+                    // === 新增：字符串插值支持 ===
+                    // 检查字符串中是否包含 @var@ 模式
+                    let has_var_pattern = identifier.contains('@') && Self::has_var_pattern(identifier);
+                    
+                    if has_var_pattern {
+                        // 字符串插值：替换所有 @var@ 为栈值
+                        let output = self.interpolate_string(identifier);
+                        print!("{} ", output);
+                    } else if *is_var {
+                        // 纯变量模式：@var@ 完整匹配
+                        if let Some(var_value) = self.get_stack_top(identifier) {
+                            if let Some(target_stack) = self.stacks.get(&var_value) {
+                                if let Some(top) = target_stack.last() {
+                                    print!("{} ", top);
+                                } else {
+                                    print!("(empty) ");
+                                }
+                            } else {
+                                print!("{} ", var_value);
+                            }
                         } else {
-                            print!("(empty) ");
+                            print!("(undefined) ");
                         }
                     } else {
-                        print!("{} ", identifier);
+                        // 普通栈名或字面量
+                        if let Some(stack) = self.stacks.get(identifier) {
+                            if let Some(top) = stack.last() {
+                                print!("{} ", top);
+                            } else {
+                                print!("(empty) ");
+                            }
+                        } else {
+                            print!("{} ", identifier);
+                        }
                     }
                 }
                 Instruction::PrintNewLine => {
@@ -173,9 +214,23 @@ impl VM {
                         eprintln!("Runtime Error: Function '{}' not defined", func_name);
                     }
                 }
-                Instruction::ConditionalJump { left_stack, right_stack, op, target_func } => {
-                    let left_val = self.get_stack_top(left_stack);
-                    let right_val = self.get_stack_top(right_stack);
+                Instruction::ConditionalJump { left_stack, left_is_var, right_stack, right_is_var, op, target_func } => {
+                    // === 新增：根据 is_var 标记解析操作数 ===
+                    let left_val = if *left_is_var {
+                        // 变量模式：从同名栈获取顶部值
+                        self.get_stack_top(left_stack)
+                    } else {
+                        // 非变量模式：先尝试栈名，找不到则当作字面量
+                        self.get_stack_top(left_stack).or_else(|| Some(left_stack.clone()))
+                    };
+                    
+                    let right_val = if *right_is_var {
+                        // 变量模式：从同名栈获取顶部值
+                        self.get_stack_top(right_stack)
+                    } else {
+                        // 非变量模式：先尝试栈名，找不到则当作字面量
+                        self.get_stack_top(right_stack).or_else(|| Some(right_stack.clone()))
+                    };
 
                     if let (Some(l), Some(r)) = (left_val, right_val) {
                         if self.compare(&l, &r, op.clone()) {
@@ -186,11 +241,68 @@ impl VM {
                             }
                         }
                     } else {
-                        eprintln!("Runtime Error: Could not retrieve values from stacks '{}' or '{}' for jump condition", left_stack, right_stack);
+                        eprintln!("Runtime Error: Could not retrieve values for jump condition (left: '{}', right: '{}')", left_stack, right_stack);
                     }
                 }
             }
         }
+    }
+
+    // === 新增：检查字符串是否包含 @var@ 模式 ===
+    fn has_var_pattern(s: &str) -> bool {
+        let mut chars = s.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c == '@' {
+                // 检查是否形成 @var@ 模式
+                let mut var_content = String::new();
+                let mut end_found = false;
+                for c2 in &mut chars {
+                    if c2 == '@' {
+                        end_found = true;
+                        break;
+                    }
+                    var_content.push(c2);
+                }
+                if end_found && !var_content.is_empty() {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    // === 新增：字符串插值 - 替换 @var@ 为栈值 ===
+    fn interpolate_string(&self, s: &str) -> String {
+        let mut result = s.to_string();
+        // 反复查找并替换 @var@ 模式
+        loop {
+            // 找到第一个 @ 开始的位置
+            match result.find('@') {
+                Some(start) => {
+                    // 检查是否形成完整的 @var@ 模式
+                    // 注意：需要从 remaining[1..] 中查找第二个 @，而不是从 remaining 开头查找
+                    let remaining = &result[start..];
+                    if let Some(end_offset) = remaining.get(1..).and_then(|s| s.find('@')) {
+                        // var_name 是从第一个 @ 之后到第二个 @ 之间的内容
+                        let var_name = remaining[1..1 + end_offset].to_string();
+                        if !var_name.is_empty() {
+                            // 找到变量名，获取其值
+                            let val = self.get_stack_top(&var_name).unwrap_or_else(|| "(undefined)".to_string());
+                            // 第二个 @ 在 remaining 中的绝对位置 = 1 + end_offset
+                            // 对应到 result 中的位置 = start + 1 + end_offset
+                            // 我们要替换的范围是 [start, start + 1 + end_offset + 1) 即 @varname@
+                            let absolute_end = start + 1 + end_offset + 1;
+                            result = result[..start].to_string() + &val + &result[absolute_end..];
+                            continue;
+                        }
+                    }
+                    // 不是有效的 @var@ 模式，停止插值
+                    break;
+                }
+                None => break,
+            }
+        }
+        result
     }
 
     fn get_stack_top(&self, stack_name: &str) -> Option<String> {
@@ -233,6 +345,9 @@ struct Parser {
 }
 
 impl Parser {
+    fn is_variable(s: &str) -> bool {
+        s.starts_with('@') && s.ends_with('@') && s.len() > 2
+    }
         fn new(input: &str) -> Self {
             let mut tokens = Vec::new();
             let mut line_map = Vec::new();
@@ -320,8 +435,11 @@ impl Parser {
                 "psh" => {
                     self.consume("psh").map_err(|e| self.create_error("MissingArgument", 1001, &cmd))?;
                     let stack = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
-                    let val = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
-                    instructions.push(Instruction::Push(stack, val));
+                    let val_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    let is_var = Self::is_variable(&val_token);
+                    // 如果是变量，去掉前后的 @ 符号；否则保持原样
+                    let val_content = if is_var { val_token[1..val_token.len()-1].to_string() } else { val_token };
+                    instructions.push(Instruction::Push(stack, (val_content, is_var)));
                 }
                 "pop" => {
                     self.consume("pop").map_err(|e| self.create_error("MissingArgument", 1001, &cmd))?;
@@ -330,8 +448,11 @@ impl Parser {
                 }
                 "out" => {
                     self.consume("out").map_err(|e| self.create_error("MissingArgument", 1001, &cmd))?;
-                    let id = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
-                    instructions.push(Instruction::Out(id));
+                    let id_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    
+                    let is_var = Self::is_variable(&id_token);
+                    let id_content = if is_var { id_token[1..id_token.len()-1].to_string() } else { id_token };
+                    instructions.push(Instruction::Out((id_content, is_var)));
                 }
                 "otn" => {
                     self.consume("otn").map_err(|e| self.create_error("ParseError", 1003, &cmd))?;
@@ -358,8 +479,8 @@ impl Parser {
                 "jmp" => {
                     self.consume("jmp").map_err(|e| self.create_error("MissingArgument", 1001, &cmd))?;
                     
-                    let left_stack = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
-                    let right_stack = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    let left_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    let right_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
                     let op_str = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
                     
                     let op = ComparisonOp::from_str(&op_str).map_err(|_| {
@@ -370,9 +491,26 @@ impl Parser {
                     
                     let target_func = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
                     
+                    // === 新增：处理变量语法 @var@ ===
+                    let left_is_var = Self::is_variable(&left_token);
+                    let left_stack = if left_is_var {
+                        left_token[1..left_token.len()-1].to_string()
+                    } else {
+                        left_token
+                    };
+                    
+                    let right_is_var = Self::is_variable(&right_token);
+                    let right_stack = if right_is_var {
+                        right_token[1..right_token.len()-1].to_string()
+                    } else {
+                        right_token
+                    };
+                    
                     instructions.push(Instruction::ConditionalJump {
                         left_stack,
+                        left_is_var,
                         right_stack,
+                        right_is_var,
                         op,
                         target_func,
                     });
@@ -430,11 +568,13 @@ impl Parser {
                     let name = self.next_arg()?;
                     block_instrs.push(Instruction::CreateStack(name));
                 }
-                "psh" => {
+"psh" => {
                     self.consume("psh")?;
                     let stack = self.next_arg()?;
-                    let val = self.next_arg()?;
-                    block_instrs.push(Instruction::Push(stack, val));
+                    let val_token = self.next_arg()?;
+                    let is_var = Self::is_variable(&val_token);
+                    let val_content = if is_var { val_token[1..val_token.len()-1].to_string() } else { val_token };
+                    block_instrs.push(Instruction::Push(stack, (val_content, is_var)));
                 }
                 "pop" => {
                     self.consume("pop")?;
@@ -443,8 +583,10 @@ impl Parser {
                 }
                 "out" => {
                     self.consume("out")?;
-                    let id = self.next_arg()?;
-                    block_instrs.push(Instruction::Out(id));
+                    let id_token = self.next_arg()?;
+                    let is_var = Self::is_variable(&id_token);
+                    let id_content = if is_var { id_token[1..id_token.len()-1].to_string() } else { id_token };
+                    block_instrs.push(Instruction::Out((id_content, is_var)));
                 }
                 "otn" => {
                     self.consume("otn")?;
@@ -469,16 +611,33 @@ impl Parser {
                 }
                 "jmp" => {
                     self.consume("jmp")?;
-                    let left_stack = self.next_arg()?;
-                    let right_stack = self.next_arg()?;
+                    let left_token = self.next_arg()?;
+                    let right_token = self.next_arg()?;
                     let op_str = self.next_arg()?;
                     let op = ComparisonOp::from_str(&op_str)?;
                     self.consume("cal")?;
                     let target_func = self.next_arg()?;
                     
+                    // === 新增：处理变量语法 @var@ ===
+                    let left_is_var = Self::is_variable(&left_token);
+                    let left_stack = if left_is_var {
+                        left_token[1..left_token.len()-1].to_string()
+                    } else {
+                        left_token
+                    };
+                    
+                    let right_is_var = Self::is_variable(&right_token);
+                    let right_stack = if right_is_var {
+                        right_token[1..right_token.len()-1].to_string()
+                    } else {
+                        right_token
+                    };
+                    
                     block_instrs.push(Instruction::ConditionalJump {
                         left_stack,
+                        left_is_var,
                         right_stack,
+                        right_is_var,
                         op,
                         target_func,
                     });
