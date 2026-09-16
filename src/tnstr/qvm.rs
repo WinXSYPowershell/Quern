@@ -105,6 +105,15 @@ enum Instruction {
         op: ComparisonOp,
         target_func: String,
     },
+    PushExpr(String, ArithmeticOp, String),
+}
+
+#[derive(Debug, Clone)]
+enum ArithmeticOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
 }
 
 struct Program {
@@ -117,7 +126,6 @@ struct Program {
 struct VM {
     stacks: HashMap<String, Vec<String>>,
 }
-
 impl VM {
     fn new() -> Self {
         VM {
@@ -161,6 +169,36 @@ impl VM {
                     } else {
                         eprintln!("Runtime Error: Stack '{}' not found", stack_name);
                     }
+                Instruction::PushExpr(stack_name, op, rhs_value) => {
+                    // 获取栈顶值（如果栈为空则使用"0"）
+                    let top_val = self.get_stack_top(stack_name).unwrap_or_else(|| "0".to_string());
+
+                    // 解析为 f64 进行算术运算
+                    let top_num = top_val.parse::<f64>().unwrap_or(0.0);
+                    let rhs_num = rhs_value.parse::<f64>().unwrap_or(0.0);
+
+                    // 执行运算
+                    let result = match op {
+                        ArithmeticOp::Add => top_num + rhs_num,
+                        ArithmeticOp::Sub => top_num - rhs_num,
+                        ArithmeticOp::Mul => top_num * rhs_num,
+                        ArithmeticOp::Div => {
+                            if rhs_num == 0.0 {
+                                eprintln!("Runtime Error: Division by zero");
+                                0.0
+                            } else {
+                                top_num / rhs_num
+                            }
+                        }
+                    };
+
+                    // 将结果推入栈中
+                    if let Some(stack) = self.stacks.get_mut(stack_name) {
+                        stack.push(result.to_string());
+                    } else {
+                        eprintln!("Runtime Error: Stack '{}' not found", stack_name);
+                    }
+                }
                 }
                 Instruction::Out((identifier, is_var)) => {
                     // --- 修正点：处理 Out 的标识符 ---
@@ -358,7 +396,35 @@ impl Parser {
                 }
                 "psh" => {
                     self.consume("psh").map_err(|e| self.create_error("MissingArgument", 1001, &cmd))?;
-                    let stack = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+
+                    // 获取第一个参数（栈名或变量引用）
+                    let first_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+
+                    // 检查是否是新的表达式语法: @var@ op "value"
+                    if Self::is_variable(&first_token) {
+                        // peek 下一个token是否是运算符
+                        if let Some(op_token) = self.tokens.get(self.pos).cloned() {
+                            if ["+", "-", "*", "/"].contains(&op_token.as_str()) {
+                                // 新的表达式语法
+                                self.pos += 1; // 消费运算符
+                                let rhs_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                                let stack_name = first_token[1..first_token.len()-1].to_string(); // 去掉@
+                                let rhs_value = rhs_token.trim_matches('"').to_string();
+                                let op = match op_token.as_str() {
+                                    "+" => ArithmeticOp::Add,
+                                    "-" => ArithmeticOp::Sub,
+                                    "*" => ArithmeticOp::Mul,
+                                    "/" => ArithmeticOp::Div,
+                                    _ => unreachable!(),
+                                };
+                                instructions.push(Instruction::PushExpr(stack_name, op, rhs_value));
+                                continue;
+                            }
+                        }
+                    }
+
+                    // 旧的简单推送语法
+                    let stack = first_token;
                     let val_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
                     let is_var = Self::is_variable(&val_token);
                     // 如果是变量，去掉前后的 @ 符号；否则保持原样
@@ -475,9 +541,37 @@ impl Parser {
                     let name = self.next_arg()?;
                     block_instrs.push(Instruction::CreateStack(name));
                 }
-"psh" => {
+                "psh" => {
                     self.consume("psh")?;
-                    let stack = self.next_arg()?;
+
+                    // 获取第一个参数（栈名或变量引用）
+                    let first_token = self.next_arg()?;
+
+                    // 检查是否是新的表达式语法: @var@ op "value"
+                    if Self::is_variable(&first_token) {
+                        // peek 下一个token是否是运算符
+                        if let Some(op_token) = self.tokens.get(self.pos).cloned() {
+                            if ["+", "-", "*", "/"].contains(&op_token.as_str()) {
+                                // 新的表达式语法
+                                self.pos += 1; // 消费运算符
+                                let rhs_token = self.next_arg()?;
+                                let stack_name = first_token[1..first_token.len()-1].to_string(); // 去掉@
+                                let rhs_value = rhs_token.trim_matches('"').to_string();
+                                let op = match op_token.as_str() {
+                                    "+" => ArithmeticOp::Add,
+                                    "-" => ArithmeticOp::Sub,
+                                    "*" => ArithmeticOp::Mul,
+                                    "/" => ArithmeticOp::Div,
+                                    _ => unreachable!(),
+                                };
+                                block_instrs.push(Instruction::PushExpr(stack_name, op, rhs_value));
+                                continue;
+                            }
+                        }
+                    }
+
+                    // 旧的简单推送语法
+                    let stack = first_token;
                     let val_token = self.next_arg()?;
                     let is_var = Self::is_variable(&val_token);
                     let val_content = if is_var { val_token[1..val_token.len()-1].to_string() } else { val_token };
