@@ -40,6 +40,9 @@ jmp @cunters@ >= 100
 out "Hello Number:@cunters@"
 }
 ```
+
+- [ ] 4.添加给QuernBuild支持Qvm新功能
+- [ ] 5.translator也是
 ### 1. 热点检测与 AOT 自动触发（当前优先）
 
 - [ ] 设定阈值（建议 10000 次调用或 1000 次循环迭代）
