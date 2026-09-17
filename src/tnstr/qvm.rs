@@ -223,15 +223,16 @@ impl VM {
                             print!("(undefined) ");
                         }
                     } else {
-                        // 如果不是变量，保持原有逻辑
-                        if let Some(stack) = self.stacks.get(identifier) {
+                        // 非变量模式：先进行字符串插值(@var@ -> 实际值)，再尝试栈查找
+                        let resolved = self.resolve_string(identifier);
+                        if let Some(stack) = self.stacks.get(&resolved) {
                             if let Some(top) = stack.last() {
                                 print!("{} ", top);
                             } else {
                                 print!("(empty) ");
                             }
                         } else {
-                            print!("{} ", identifier);
+                            print!("{} ", resolved);
                         }
                     }
                 }
@@ -249,19 +250,19 @@ impl VM {
                     }
                 }
                 Instruction::ConditionalJump { left_stack, right_stack, op, target_func } => {
-                    // 使用正确的字段名 left_stack 和 right_stack
+                    // 左侧操作数：变量模式从栈取值，直接模式用字面值
                     let left_val = if left_stack.1 {
-                        // 变量模式
+                        // 变量模式：从栈中获取值
                         self.get_stack_top(&left_stack.0)
                     } else {
-                        // 直接栈模式
-                        self.get_stack_top(&left_stack.0)
+                        // 直接模式：使用字符串作为字面值
+                        Some(left_stack.0.clone())
                     };
 
                     let right_val = if right_stack.1 {
                         self.get_stack_top(&right_stack.0)
                     } else {
-                        self.get_stack_top(&right_stack.0)
+                        Some(right_stack.0.clone())
                     };
 
                     // 修复类型错误：get_stack_top 返回的是 Option<String>
@@ -317,6 +318,22 @@ impl VM {
 
     fn get_stack_top(&self, stack_name: &str) -> Option<String> {
         self.stacks.get(stack_name).and_then(|s| s.last().cloned())
+    }
+
+    /// 解析字符串中的 @var@ 模式，替换为对应栈的顶部值
+    fn resolve_string(&self, s: &str) -> String {
+        let mut result = s.to_string();
+        // 循环替换所有 @var@ 模式
+        while let Some(start) = result.find('@') {
+            if let Some(end) = result[start+1..].find('@') {
+                let var_name = &result[start+1..start+1+end];
+                let var_value = self.get_stack_top(var_name).unwrap_or_default();
+                result = result.replace(&format!("@{}@", var_name), &var_value);
+            } else {
+                break;
+            }
+        }
+        result
     }
 
     fn compare(&self, left: &str, right: &str, op: ComparisonOp) -> bool {
