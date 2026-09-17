@@ -33,11 +33,15 @@ out @cunters@
 ```quernvm
 crt cunters
 psh cunters "1"
-
+cal loop1
 fnc "loop1"{
-pop cunters
-jmp @cunters@ >= 100
+jmp @cunters@ 100 >= cal "exit"
 out "Hello Number:@cunters@"
+psh @cunters@ + 1
+cal "loop1"
+}
+
+fnc "exit"{
 }
 ```
 
