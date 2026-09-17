@@ -514,7 +514,7 @@ impl Parser {
                     // 1. 解析左侧操作数
                     self.consume("jmp").map_err(|e| self.create_error("MissingArgument", 1001, &cmd))?;
                     
-                    let left_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
+                    let left_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
                     let left_is_var = Self::is_variable(&left_token);
                     let left_content = if left_is_var { 
                         left_token[1..left_token.len()-1].to_string() 
@@ -523,7 +523,7 @@ impl Parser {
                     };
 
                     // 2. 解析右侧操作数
-                    let right_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
+                    let right_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
                     let right_is_var = Self::is_variable(&right_token);
                     let right_content = if right_is_var { 
                         right_token[1..right_token.len()-1].to_string() 
@@ -532,18 +532,18 @@ impl Parser {
                     };
 
                     // 3. 解析操作符
-                    let op_str = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
+                    let op_str = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
                     let op = ComparisonOp::from_str(&op_str).map_err(|_| {
                         self.create_error("InvalidOperator", 1006, &op_str)
                     })?;
 
                     // 4. 解析目标函数
-                    self.consume("cal").map_err(|e| self.create_error("MissingCalKeyword", 1007, &cmd).to_string())?;
-                    let target_func = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
+                    self.consume("cal").map_err(|e| self.create_error("MissingCalKeyword", 1007, &cmd))?;
+                    let target_func = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
 
                     // 5. 生成指令
                     // 使用正确的字段名 left_stack 和 right_stack
-                    block_instrs.push(Instruction::ConditionalJump {
+                    instructions.push(Instruction::ConditionalJump {
                         left_stack: (left_content, left_is_var), 
                         right_stack: (right_content, right_is_var), 
                         op, 
@@ -669,10 +669,10 @@ impl Parser {
                     block_instrs.push(Instruction::CallFunction(func_name));
                 }
                 "jmp" => {
-                    self.consume("jmp").map_err(|e| self.create_error("MissingArgument", 1001, &cmd))?;
+                    self.consume("jmp").map_err(|e| self.create_error("MissingArgument", 1001, &cmd).to_string())?;
                     
                     // 1. 解析左侧操作数
-                    let left_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    let left_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
                     let left_is_var = Self::is_variable(&left_token);
                     let left_content = if left_is_var { 
                         left_token[1..left_token.len()-1].to_string() 
@@ -681,7 +681,7 @@ impl Parser {
                     };
 
                     // 2. 解析右侧操作数
-                    let right_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    let right_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
                     let right_is_var = Self::is_variable(&right_token);
                     let right_content = if right_is_var { 
                         right_token[1..right_token.len()-1].to_string() 
@@ -690,17 +690,17 @@ impl Parser {
                     };
 
                     // 3. 解析操作符
-                    let op_str = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    let op_str = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
                     let op = ComparisonOp::from_str(&op_str).map_err(|_| {
-                        self.create_error("InvalidOperator", 1006, &op_str)
+                        self.create_error("InvalidOperator", 1006, &op_str).to_string()
                     })?;
 
                     // 4. 解析目标函数
-                    self.consume("cal").map_err(|e| self.create_error("MissingCalKeyword", 1007, &cmd))?;
-                    let target_func = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    self.consume("cal").map_err(|e| self.create_error("MissingCalKeyword", 1007, &cmd).to_string())?;
+                    let target_func = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
 
                     // 5. 生成指令
-                    instructions.push(Instruction::ConditionalJump { 
+                    block_instrs.push(Instruction::ConditionalJump { 
                         left_stack: (left_content, left_is_var), 
                         right_stack: (right_content, right_is_var), 
                         op, 
