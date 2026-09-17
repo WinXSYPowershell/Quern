@@ -273,6 +273,7 @@ impl VM {
                             } else {
                                 eprintln!("Runtime Error: Jump target function '{}' not defined", target_func);
                             }
+                            return;
                         }
                     } else {
                         eprintln!("Runtime Error: Could not retrieve values for jump condition");
