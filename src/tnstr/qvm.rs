@@ -133,16 +133,16 @@ enum Instruction {
     PrintNewLine,
     DeleteStack(String),
     CallFunction(String),
-    ConditionalJump {
-        left_stack: String,
-        right_stack: String,
-        op: ComparisonOp,
-        target_func: String,
-    },
     Arithmetic {
         stack: String,
         operator: ArithmeticOp,
         value: String,
+    },
+    ConditionalJump { 
+        left: (String, bool),   // (名称, 是否为变量)
+        right: (String, bool),  // (名称, 是否为变量)
+        op: ComparisonOp, 
+        target_func: String,
     },
 }
 
@@ -249,9 +249,22 @@ impl VM {
                     }
                 }
                 Instruction::ConditionalJump { left_stack, right_stack, op, target_func } => {
-                    let left_val = self.get_stack_top(left_stack);
-                    let right_val = self.get_stack_top(right_stack);
+                    // 使用正确的字段名 left_stack 和 right_stack
+                    let left_val = if left_stack.1 {
+                        // 变量模式
+                        self.get_stack_top(&left_stack.0)
+                    } else {
+                        // 直接栈模式
+                        self.get_stack_top(&left_stack.0)
+                    };
 
+                    let right_val = if right_stack.1 {
+                        self.get_stack_top(&right_stack.0)
+                    } else {
+                        self.get_stack_top(&right_stack.0)
+                    };
+
+                    // 修复类型错误：get_stack_top 返回的是 Option<String>
                     if let (Some(l), Some(r)) = (left_val, right_val) {
                         if self.compare(&l, &r, op.clone()) {
                             if let Some(body) = functions.get(target_func) {
@@ -261,7 +274,7 @@ impl VM {
                             }
                         }
                     } else {
-                        eprintln!("Runtime Error: Could not retrieve values from stacks '{}' or '{}' for jump condition", left_stack, right_stack);
+                        eprintln!("Runtime Error: Could not retrieve values for jump condition");
                     }
                 }
                 Instruction::Arithmetic { stack, operator, value } => {
@@ -498,25 +511,43 @@ impl Parser {
                     instructions.push(Instruction::CallFunction(func_name));
                 }
                 "jmp" => {
-                    self.consume("jmp").map_err(|e| self.create_error("MissingArgument", 1001, &cmd))?;
+                    // 1. 解析左侧操作数
+                    self.consume("jmp").map_err(|e| self.create_error("MissingArgument", 1001, &cmd).to_string())?;
                     
-                    let left_stack = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
-                    let right_stack = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
-                    let op_str = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
-                    
+                    let left_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
+                    let left_is_var = Self::is_variable(&left_token);
+                    let left_content = if left_is_var { 
+                        left_token[1..left_token.len()-1].to_string() 
+                    } else { 
+                        left_token 
+                    };
+
+                    // 2. 解析右侧操作数
+                    let right_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
+                    let right_is_var = Self::is_variable(&right_token);
+                    let right_content = if right_is_var { 
+                        right_token[1..right_token.len()-1].to_string() 
+                    } else { 
+                        right_token 
+                    };
+
+                    // 3. 解析操作符
+                    let op_str = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
                     let op = ComparisonOp::from_str(&op_str).map_err(|_| {
-                        self.create_error("InvalidOperator", 1006, &op_str)
+                        self.create_error("InvalidOperator", 1006, &op_str).to_string()
                     })?;
-                    
-                    self.consume("cal").map_err(|e| self.create_error("MissingCalKeyword", 1007, &cmd))?;
-                    
-                    let target_func = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
-                    
-                    instructions.push(Instruction::ConditionalJump {
-                        left_stack,
-                        right_stack,
-                        op,
-                        target_func,
+
+                    // 4. 解析目标函数
+                    self.consume("cal").map_err(|e| self.create_error("MissingCalKeyword", 1007, &cmd).to_string())?;
+                    let target_func = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
+
+                    // 5. 生成指令
+                    // 使用正确的字段名 left_stack 和 right_stack
+                    instructions.push(Instruction::ConditionalJump { 
+                        left_stack: (left_content, left_is_var), 
+                        right_stack: (right_content, right_is_var), 
+                        op, 
+                        target_func, 
                     });
                 }
                 _ => {
@@ -638,19 +669,42 @@ impl Parser {
                     block_instrs.push(Instruction::CallFunction(func_name));
                 }
                 "jmp" => {
-                    self.consume("jmp")?;
-                    let left_stack = self.next_arg()?;
-                    let right_stack = self.next_arg()?;
-                    let op_str = self.next_arg()?;
-                    let op = ComparisonOp::from_str(&op_str)?;
-                    self.consume("cal")?;
-                    let target_func = self.next_arg()?;
+                    self.consume("jmp").map_err(|e| self.create_error("MissingArgument", 1001, &cmd))?;
                     
-                    block_instrs.push(Instruction::ConditionalJump {
-                        left_stack,
-                        right_stack,
-                        op,
-                        target_func,
+                    // 1. 解析左侧操作数
+                    let left_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    let left_is_var = Self::is_variable(&left_token);
+                    let left_content = if left_is_var { 
+                        left_token[1..left_token.len()-1].to_string() 
+                    } else { 
+                        left_token 
+                    };
+
+                    // 2. 解析右侧操作数
+                    let right_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    let right_is_var = Self::is_variable(&right_token);
+                    let right_content = if right_is_var { 
+                        right_token[1..right_token.len()-1].to_string() 
+                    } else { 
+                        right_token 
+                    };
+
+                    // 3. 解析操作符
+                    let op_str = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    let op = ComparisonOp::from_str(&op_str).map_err(|_| {
+                        self.create_error("InvalidOperator", 1006, &op_str)
+                    })?;
+
+                    // 4. 解析目标函数
+                    self.consume("cal").map_err(|e| self.create_error("MissingCalKeyword", 1007, &cmd))?;
+                    let target_func = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+
+                    // 5. 生成指令
+                    instructions.push(Instruction::ConditionalJump { 
+                        left: (left_content, left_is_var), 
+                        right: (right_content, right_is_var), 
+                        op, 
+                        target_func, 
                     });
                 }
                 _ => {
