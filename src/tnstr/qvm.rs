@@ -139,8 +139,8 @@ enum Instruction {
         value: String,
     },
     ConditionalJump { 
-        left: (String, bool),   // (名称, 是否为变量)
-        right: (String, bool),  // (名称, 是否为变量)
+        left_stack: (String, bool),   // (名称, 是否为变量)
+        right_stack: (String, bool),  // (名称, 是否为变量)
         op: ComparisonOp, 
         target_func: String,
     },
@@ -534,7 +534,7 @@ impl Parser {
                     // 3. 解析操作符
                     let op_str = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
                     let op = ComparisonOp::from_str(&op_str).map_err(|_| {
-                        self.create_error("InvalidOperator", 1006, &op_str).to_string()
+                        self.create_error("InvalidOperator", 1006, &op_str)
                     })?;
 
                     // 4. 解析目标函数
@@ -701,8 +701,8 @@ impl Parser {
 
                     // 5. 生成指令
                     instructions.push(Instruction::ConditionalJump { 
-                        left: (left_content, left_is_var), 
-                        right: (right_content, right_is_var), 
+                        left_stack: (left_content, left_is_var), 
+                        right_stack: (right_content, right_is_var), 
                         op, 
                         target_func, 
                     });
