@@ -512,7 +512,7 @@ impl Parser {
                 }
                 "jmp" => {
                     // 1. 解析左侧操作数
-                    self.consume("jmp").map_err(|e| self.create_error("MissingArgument", 1001, &cmd).to_string())?;
+                    self.consume("jmp").map_err(|e| self.create_error("MissingArgument", 1001, &cmd))?;
                     
                     let left_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
                     let left_is_var = Self::is_variable(&left_token);
@@ -543,7 +543,7 @@ impl Parser {
 
                     // 5. 生成指令
                     // 使用正确的字段名 left_stack 和 right_stack
-                    instructions.push(Instruction::ConditionalJump { 
+                    block_instrs.push(Instruction::ConditionalJump {
                         left_stack: (left_content, left_is_var), 
                         right_stack: (right_content, right_is_var), 
                         op, 
