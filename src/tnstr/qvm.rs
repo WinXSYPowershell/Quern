@@ -400,6 +400,25 @@ impl Parser {
                                 current_token.clear();
                             }
                         }
+                        // 左花括号和右花括号也作为独立的token（不在引号内时）
+                        '{' if !in_quotes => {
+                            if !current_token.is_empty() {
+                                tokens.push(current_token.clone());
+                                line_map.push(line_num);
+                                current_token.clear();
+                            }
+                            tokens.push("{".to_string());
+                            line_map.push(line_num);
+                        }
+                        '}' if !in_quotes => {
+                            if !current_token.is_empty() {
+                                tokens.push(current_token.clone());
+                                line_map.push(line_num);
+                                current_token.clear();
+                            }
+                            tokens.push("}".to_string());
+                            line_map.push(line_num);
+                        }
                         // 其他字符都加到当前token里
                         _ => {
                             current_token.push(c);
