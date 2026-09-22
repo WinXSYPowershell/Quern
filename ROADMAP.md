@@ -47,6 +47,14 @@ fnc "exit"{
 
 - [ ] 4.添加给QuernBuild支持Qvm新功能
 - [ ] 5.translator也是
+
+- [ ] 6.添加VmCode的逃生舱
+示例：
+```quern
+#VMCODE _BEGIN
+out "Hello"
+#VMCODE _END
+```
 ### 1. 热点检测与 AOT 自动触发（当前优先）
 
 - [ ] 设定阈值（建议 10000 次调用或 1000 次循环迭代）

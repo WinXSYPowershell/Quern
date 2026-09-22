@@ -54,6 +54,14 @@ struct SyntaxError {
 
 // --- Instruction Definitions ---
 
+// --- Variable (@name@) helpers: stack-pop variable feature ---
+static bool is_variable(const std::string& s) {
+    return s.size() > 2 && s.front() == '@' && s.back() == '@';
+}
+static std::string var_base_name(const std::string& s) {
+    return s.substr(1, s.size() - 2);
+}
+
 enum class ComparisonOp {
     Equal, NotEqual, LessThan, GreaterThan, LessEqual, GreaterEqual
 };
@@ -175,6 +183,12 @@ class Parser {
             consume("out");
             if (!has_next()) throw create_error("MissingArgument", 1001, "out");
             
+            // New Feature: 'out @var@' -> output the value referenced by a stack variable
+            if (is_variable(peek())) {
+                std::string var_tok = next_arg();
+                return {"out_var", "", var_tok, "", "", ComparisonOp::Equal};
+            }
+
             // Collect all remaining tokens on the SAME line as the output string
             std::string output_str;
             bool first = true;
@@ -301,16 +315,22 @@ class CodeGenerator {
     std::set<std::string> stack_names;
 
     void collect_stack_names(const std::vector<Instruction>& instrs) {
+        // Normalize a stack-name token before registering it: "@name@" (variable)
+        // refers to the stack called "name", so store the base name only.
+        auto reg = [this](const std::string& a) {
+            stack_names.insert(is_variable(a) ? var_base_name(a) : a);
+        };
         for (const auto& instr : instrs) {
-            if (instr.type == "crt" || instr.type == "psh" || instr.type == "pop" || instr.type == "del") {
-                stack_names.insert(instr.arg1);
-            } else if (instr.type == "out") {
-                 // 'out' arg1 might be a stack name or a literal identifier in old logic
-                 // In new logic, literals are 'out_lit'
-                 if (instr.type == "out") stack_names.insert(instr.arg1);
+            if (instr.type == "crt" || instr.type == "pop" || instr.type == "del") {
+                reg(instr.arg1);
+            } else if (instr.type == "psh") {
+                reg(instr.arg1);                              // target stack (plain name)
+                if (is_variable(instr.arg2)) reg(instr.arg2); // pushed value is a @var@
+            } else if (instr.type == "out_var") {
+                reg(instr.arg2);                              // referenced stack variable
             } else if (instr.type == "jmp") {
-                stack_names.insert(instr.arg1);
-                stack_names.insert(instr.arg2);
+                reg(instr.arg1);                              // operand: plain stack name or @var@
+                reg(instr.arg2);
             }
         }
     }
@@ -320,7 +340,7 @@ class CodeGenerator {
         auto check_instrs = [](const std::vector<Instruction>& instrs) -> bool {
             for (const auto& instr : instrs) {
                 if (instr.type == "crt" || instr.type == "psh" || instr.type == "pop" || 
-                    instr.type == "del" || instr.type == "jmp") {
+                    instr.type == "del" || instr.type == "jmp" || instr.type == "out_var") {
                     return true;
                 }
             }
@@ -357,11 +377,18 @@ class CodeGenerator {
         };
 
         if (instr.type == "psh") {
+            if (is_variable(instr.arg2)) {
+                return "push_stack(&" + instr.arg1 + ", get_top_by_name(\"" + var_base_name(instr.arg2) + "\"));";
+            }
             return "push_stack(&" + instr.arg1 + ", \"" + process_string(instr.arg2) + "\");";
         }
         
         if (instr.type == "pop") return "pop_stack(&" + instr.arg1 + ");";
         
+        if (instr.type == "out_var") {
+            return "out_variable(&" + var_base_name(instr.arg2) + ");";
+        }
+
         if (instr.type == "out") {
             if (stack_names.count(instr.arg1)) {
                 return "print_top(&" + instr.arg1 + ");";
@@ -381,7 +408,13 @@ class CodeGenerator {
         if (instr.type == "cal") return instr.arg1 + "();";
         
         if (instr.type == "jmp") {
-            return "if (compare_stacks(&" + instr.arg1 + ", &" + instr.arg2 + ", \"" + instr.arg3 + "\")) " + instr.arg4 + "();";
+            std::string l = is_variable(instr.arg1)
+                ? ("get_top_by_name(\"" + var_base_name(instr.arg1) + "\")")
+                : ("get_top(&" + instr.arg1 + ")");
+            std::string r = is_variable(instr.arg2)
+                ? ("get_top_by_name(\"" + var_base_name(instr.arg2) + "\")")
+                : ("get_top(&" + instr.arg2 + ")");
+            return "if (compare_values(" + l + ", " + r + ", \"" + instr.arg3 + "\")) " + instr.arg4 + "();";
         }
         return "";
     }
@@ -476,6 +509,76 @@ int compare_stacks(Stack* l, Stack* r, const char* op) {
     }
     return 0;
 }
+
+// --- Variable (@name@) runtime support ---
+typedef struct { const char* name; Stack* s; } StackRef;
+StackRef __stack_registry[256];
+int __stack_registry_len = 0;
+
+void register_stack(const char* name, Stack* s) {
+    if (__stack_registry_len < 256) {
+        __stack_registry[__stack_registry_len].name = name;
+        __stack_registry[__stack_registry_len].s = s;
+        __stack_registry_len++;
+    }
+}
+
+Stack* find_stack(const char* name) {
+    for (int i = 0; i < __stack_registry_len; i++) {
+        if (strcmp(__stack_registry[i].name, name) == 0) return __stack_registry[i].s;
+    }
+    return NULL;
+}
+
+const char* get_top(Stack* s) {
+    return (s != NULL && s->size > 0) ? s->items[s->size - 1] : "";
+}
+
+const char* get_top_by_name(const char* name) {
+    Stack* s = find_stack(name);
+    return (s != NULL && s->size > 0) ? s->items[s->size - 1] : "";
+}
+
+void out_variable(Stack* var_stack) {
+    if (var_stack == NULL || var_stack->size == 0) {
+        printf("(undefined) ");
+        return;
+    }
+    const char* val = var_stack->items[var_stack->size - 1];
+    Stack* target = find_stack(val);
+    if (target != NULL) {
+        if (target->size > 0) printf("%s ", target->items[target->size - 1]);
+        else printf("(empty) ");
+    } else {
+        printf("%s ", val);
+    }
+}
+
+int compare_values(const char* lv, const char* rv, const char* op) {
+    if (lv == NULL || rv == NULL) return 0;
+    char* lend;
+    char* rend;
+    double ln = strtod(lv, &lend);
+    double rn = strtod(rv, &rend);
+    int is_num = (*lend == '\0' && *rend == '\0' && lend != lv && rend != rv);
+    if (is_num) {
+        if (strcmp(op, "=") == 0) return (ln - rn) < 1e-9 && (ln - rn) > -1e-9;
+        if (strcmp(op, "!=") == 0) return (ln - rn) >= 1e-9 || (ln - rn) <= -1e-9;
+        if (strcmp(op, "<") == 0) return ln < rn;
+        if (strcmp(op, ">") == 0) return ln > rn;
+        if (strcmp(op, "=<") == 0) return ln <= rn;
+        if (strcmp(op, ">=") == 0) return ln >= rn;
+    } else {
+        int cmp = strcmp(lv, rv);
+        if (strcmp(op, "=") == 0) return cmp == 0;
+        if (strcmp(op, "!=") == 0) return cmp != 0;
+        if (strcmp(op, "<") == 0) return cmp < 0;
+        if (strcmp(op, ">") == 0) return cmp > 0;
+        if (strcmp(op, "=<") == 0) return cmp <= 0;
+        if (strcmp(op, ">=") == 0) return cmp >= 0;
+    }
+    return 0;
+}
 )";
     }
 
@@ -528,6 +631,9 @@ public:
         
         // Initialize stacks only if used
         if (use_stack) {
+            for (const auto& name : stack_names) {
+                ss << "    register_stack(\"" << name << "\", &" << name << ");\n";
+            }
             for (const auto& name : stack_names) {
                 ss << "    init_stack(&" << name << ");\n";
             }
