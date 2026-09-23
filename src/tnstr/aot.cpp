@@ -223,6 +223,16 @@ class Parser {
         } else if (cmd == "psh") {
             consume("psh");
             std::string stack = next_arg();
+            // New Feature 2: arithmetic push -> psh <stack> <op> "<operand>"
+            // where <op> is one of + - * /
+            if (has_next()) {
+                std::string maybe_op = peek();
+                if (maybe_op == "+" || maybe_op == "-" || maybe_op == "*" || maybe_op == "/") {
+                    consume(maybe_op);
+                    std::string operand = next_arg();
+                    return {"psh_op", stack, maybe_op, operand, "", ComparisonOp::Equal};
+                }
+            }
             std::string val = next_arg();
             return {"psh", stack, val, "", "", ComparisonOp::Equal};
         } else if (cmd == "pop") {
@@ -326,6 +336,8 @@ class CodeGenerator {
             } else if (instr.type == "psh") {
                 reg(instr.arg1);                              // target stack (plain name)
                 if (is_variable(instr.arg2)) reg(instr.arg2); // pushed value is a @var@
+            } else if (instr.type == "psh_op") {
+                reg(instr.arg1);                              // target stack (plain name or @var@)
             } else if (instr.type == "out_var") {
                 reg(instr.arg2);                              // referenced stack variable
             } else if (instr.type == "jmp") {
@@ -339,8 +351,9 @@ class CodeGenerator {
     bool needs_stack_support(const Program& prog) const {
         auto check_instrs = [](const std::vector<Instruction>& instrs) -> bool {
             for (const auto& instr : instrs) {
-                if (instr.type == "crt" || instr.type == "psh" || instr.type == "pop" || 
-                    instr.type == "del" || instr.type == "jmp" || instr.type == "out_var") {
+                if (instr.type == "crt" || instr.type == "psh" || instr.type == "psh_op" ||
+                    instr.type == "pop" || instr.type == "del" || instr.type == "jmp" ||
+                    instr.type == "out_var") {
                     return true;
                 }
             }
@@ -377,16 +390,31 @@ class CodeGenerator {
         };
 
         if (instr.type == "psh") {
+            // 目标栈基名（允许 @var@ 形式）
+            std::string base = is_variable(instr.arg1) ? var_base_name(instr.arg1) : instr.arg1;
+            std::string target = is_variable(instr.arg1)
+                ? ("find_stack(\"" + base + "\")")
+                : ("&" + instr.arg1);
+            std::string valExpr;
             if (is_variable(instr.arg2)) {
-                return "push_stack(&" + instr.arg1 + ", get_top_by_name(\"" + var_base_name(instr.arg2) + "\"));";
+                valExpr = "get_top_by_name(\"" + var_base_name(instr.arg2) + "\")";
+            } else {
+                valExpr = "\""+ process_string(instr.arg2) + "\"";
             }
-            return "push_stack(&" + instr.arg1 + ", \"" + process_string(instr.arg2) + "\");";
+            // push 到物理栈，同时把值登记进变量寄存器（供算术/间接读取）
+            return "push_stack(" + target + ", " + valExpr + "); var_set(\"" + base + "\", " + valExpr + ");";
+        }
+
+        if (instr.type == "psh_op") {
+            // 目标可能是普通栈名或 @var@ 变量，统一取其基名做寄存器累加
+            std::string base = is_variable(instr.arg1) ? var_base_name(instr.arg1) : instr.arg1;
+            return "psh_arith(\"" + base + "\", \"" + instr.arg2 + "\", \"" + process_string(instr.arg3) + "\");";
         }
         
         if (instr.type == "pop") return "pop_stack(&" + instr.arg1 + ");";
         
         if (instr.type == "out_var") {
-            return "out_variable(&" + var_base_name(instr.arg2) + ");";
+            return "out_varval(\"" + var_base_name(instr.arg2) + "\");";
         }
 
         if (instr.type == "out") {
@@ -552,6 +580,79 @@ void out_variable(Stack* var_stack) {
     } else {
         printf("%s ", val);
     }
+}
+
+// --- Variable value register (New Feature 2 backing store) ---
+// A per-name numeric register decoupled from the physical stack, so that
+// arithmetic on @name@ accumulates a value that survives .
+typedef struct { char* name; char* val; } VarVal;
+VarVal __var_store[256];
+int __var_store_len = 0;
+
+const char* var_get(const char* name) {
+    for (int i = 0; i < __var_store_len; i++)
+        if (strcmp(__var_store[i].name, name) == 0) return __var_store[i].val;
+    return NULL;
+}
+
+void var_set(const char* name, const char* val) {
+    Stack* s = find_stack(name);
+    // keep the physical top in sync when the stack has a value
+    if (s != NULL && s->size > 0) {
+        free(s->items[s->size - 1]);
+        s->items[s->size - 1] = strdup(val);
+    }
+    for (int i = 0; i < __var_store_len; i++) {
+        if (strcmp(__var_store[i].name, name) == 0) {
+            free(__var_store[i].val);
+            __var_store[i].val = strdup(val);
+            return;
+        }
+    }
+    if (__var_store_len < 256) {
+        __var_store[__var_store_len].name = strdup(name);
+        __var_store[__var_store_len].val = strdup(val);
+        __var_store_len++;
+    }
+}
+
+// out @name@: prefer the numeric register; fall back to the original
+// indirect (value-is-a-stack-name) resolution when the register is unset.
+void out_varval(const char* name) {
+    const char* val = var_get(name);
+    if (val == NULL) { out_variable(find_stack(name)); return; }
+    Stack* target = find_stack(val);
+    if (target != NULL) {
+        if (target->size > 0) printf("%s ", target->items[target->size - 1]);
+        else printf("(empty) ");
+    } else {
+        printf("%s ", val);
+    }
+}
+
+// --- Arithmetic push (New Feature 2): psh <stack> <op> "<operand>" ---
+// base = current register value of <stack> (or its stack top, or 0);
+// res = base OP operand; the result is written back to the register.
+void psh_arith(const char* name, const char* op, const char* operand) {
+    double base = 0.0;
+    const char* cur = var_get(name);
+    if (cur != NULL) {
+        base = strtod(cur, NULL);
+    } else {
+        Stack* s = find_stack(name);
+        if (s != NULL && s->size > 0) base = strtod(s->items[s->size - 1], NULL);
+    }
+    double rhs = strtod(operand, NULL);
+    double res = base;
+    if (strcmp(op, "+") == 0)      res = base + rhs;
+    else if (strcmp(op, "-") == 0) res = base - rhs;
+    else if (strcmp(op, "*") == 0) res = base * rhs;
+    else if (strcmp(op, "/") == 0) res = (rhs != 0.0) ? (base / rhs) : 0.0;
+
+    char buf[64];
+    if (res == (long long)res) snprintf(buf, sizeof(buf), "%lld", (long long)res);
+    else                       snprintf(buf, sizeof(buf), "%g", res);
+    var_set(name, buf);
 }
 
 int compare_values(const char* lv, const char* rv, const char* op) {
