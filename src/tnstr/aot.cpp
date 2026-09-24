@@ -368,7 +368,7 @@ class CodeGenerator {
     }
 
     std::string generate_instr(const Instruction& instr) const {
-        if (instr.type == "crt") return "init_stack(&" + instr.arg1 + ");";
+        if (instr.type == "crt") return "init_stack(&" + sanitize_c_id(instr.arg1) + ");";
         
         // 辅助 lambda：去除首尾引号并转义
         auto process_string = [](const std::string& s) -> std::string {
@@ -394,7 +394,7 @@ class CodeGenerator {
             std::string base = is_variable(instr.arg1) ? var_base_name(instr.arg1) : instr.arg1;
             std::string target = is_variable(instr.arg1)
                 ? ("find_stack(\"" + base + "\")")
-                : ("&" + instr.arg1);
+                : ("&" + sanitize_c_id(instr.arg1));
             std::string valExpr;
             if (is_variable(instr.arg2)) {
                 valExpr = "get_top_by_name(\"" + var_base_name(instr.arg2) + "\")";
@@ -411,7 +411,7 @@ class CodeGenerator {
             return "psh_arith(\"" + base + "\", \"" + instr.arg2 + "\", \"" + process_string(instr.arg3) + "\");";
         }
         
-        if (instr.type == "pop") return "pop_stack(&" + instr.arg1 + ");";
+        if (instr.type == "pop") return "pop_stack(&" + sanitize_c_id(instr.arg1) + ");";
         
         if (instr.type == "out_var") {
             return "out_varval(\"" + var_base_name(instr.arg2) + "\");";
@@ -419,7 +419,7 @@ class CodeGenerator {
 
         if (instr.type == "out") {
             if (stack_names.count(instr.arg1)) {
-                return "print_top(&" + instr.arg1 + ");";
+                return "print_top(&" + sanitize_c_id(instr.arg1) + ");";
             } else {
                 // 旧逻辑 fallback
                 return "printf(\"" + process_string(instr.arg1) + "\");";
@@ -432,8 +432,8 @@ class CodeGenerator {
         }
         
         if (instr.type == "otn") return "printf(\"\\n\");";
-        if (instr.type == "del") return "free_stack(&" + instr.arg1 + ");";
-        if (instr.type == "cal") return instr.arg1 + "();";
+        if (instr.type == "del") return "free_stack(&" + sanitize_c_id(instr.arg1) + ");";
+        if (instr.type == "cal") return qb_func_name(instr.arg1) + "();";
         
         if (instr.type == "jmp") {
             // Left operand: @var@ -> get_top_by_name, numeric literal -> string literal, stack name -> get_top
@@ -443,7 +443,7 @@ class CodeGenerator {
             } else if (std::isdigit((unsigned char)instr.arg1[0])) {
                 l = "\"" + instr.arg1 + "\"";
             } else {
-                l = "get_top(&" + instr.arg1 + ")";
+                l = "get_top(&" + sanitize_c_id(instr.arg1) + ")";
             }
             // Right operand: @var@ -> get_top_by_name, numeric literal -> string literal, stack name -> get_top
             std::string r;
@@ -452,9 +452,9 @@ class CodeGenerator {
             } else if (std::isdigit((unsigned char)instr.arg2[0])) {
                 r = "\"" + instr.arg2 + "\"";
             } else {
-                r = "get_top(&" + instr.arg2 + ")";
+                r = "get_top(&" + sanitize_c_id(instr.arg2) + ")";
             }
-            return "if (compare_values(" + l + ", " + r + ", \"" + instr.arg3 + "\")" + ") " + instr.arg4 + "();";
+            return "if (compare_values(" + l + ", " + r + ", \"" + instr.arg3 + "\")" + ") " + qb_func_name(instr.arg4) + "();";
         }
         return "";
     }
@@ -471,8 +471,43 @@ class CodeGenerator {
         return result;
     }
 
+
+    // Strip surrounding quotes from a token (e.g. "exit" -> exit)
+    std::string unquote(const std::string& s) const {
+        if (s.size() >= 2 && s.front() == '"' && s.back() == '"') {
+            return s.substr(1, s.size() - 2);
+        }
+        return s;
+    }
+
+    // Prefix user-defined function name with qb_ to avoid C library collisions
+    std::string qb_func_name(const std::string& name) const {
+        return "qb_" + unquote(name);
+    }
+
+    // Sanitize a stack name for use as a C identifier
+    // (e.g. "100" -> "_100")
+    std::string sanitize_c_id(const std::string& name) const {
+        if (name.empty()) return name;
+        if (std::isdigit((unsigned char)name[0])) {
+            return "_" + name;
+        }
+        for (char c : name) {
+            if (!std::isalnum((unsigned char)c) && c != '_') {
+                std::string result;
+                for (char ch : name) {
+                    result += (std::isalnum((unsigned char)ch) || ch == '_') ? ch : '_';
+                }
+                return result;
+            }
+        }
+        return name;
+    }
     std::string get_runtime_code() const {
         return R"(
+#ifdef _WIN32
+#define strdup _strdup
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -718,20 +753,20 @@ public:
             
             // Global stack variables
             for (const auto& name : stack_names) {
-                ss << "Stack " << name << ";\n";
+                ss << "Stack " << sanitize_c_id(name) << ";\n";
             }
             ss << "\n";
         }
 
         // Forward declarations
         for (const auto& pair : prog.functions) {
-            ss << "void " << pair.first << "();\n";
+            ss << "void " << qb_func_name(pair.first) << "();\n";
         }
         ss << "\n";
 
         // Function definitions
         for (const auto& pair : prog.functions) {
-            ss << "void " << pair.first << "() {\n";
+            ss << "void " << qb_func_name(pair.first) << "() {\n";
             for (const auto& instr : pair.second) {
                 std::string code = generate_instr(instr);
                 if (!code.empty()) ss << "    " << code << "\n";
@@ -745,10 +780,10 @@ public:
         // Initialize stacks only if used
         if (use_stack) {
             for (const auto& name : stack_names) {
-                ss << "    register_stack(\"" << name << "\", &" << name << ");\n";
+                ss << "    register_stack(\"" << name << "\", &" << sanitize_c_id(name) << ");\n";
             }
             for (const auto& name : stack_names) {
-                ss << "    init_stack(&" << name << ");\n";
+                ss << "    init_stack(&" << sanitize_c_id(name) << ");\n";
             }
         }
 
@@ -760,7 +795,7 @@ public:
         // Free stacks only if used
         if (use_stack) {
             for (const auto& name : stack_names) {
-                ss << "    free_stack(&" << name << ");\n";
+                ss << "    free_stack(&" << sanitize_c_id(name) << ");\n";
             }
         }
         
