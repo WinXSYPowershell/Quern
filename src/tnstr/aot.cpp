@@ -454,7 +454,7 @@ class CodeGenerator {
             } else {
                 r = "get_top(&" + instr.arg2 + ")";
             }
-            return "if (compare_values(" + l + ", " + r + ", \"" + instr.arg3 + "")" + ") " + instr.arg4 + "();";
+            return "if (compare_values(" + l + ", " + r + ", \"" + instr.arg3 + "\")" + ") " + instr.arg4 + "();";
         }
         return "";
     }
