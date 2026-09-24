@@ -439,7 +439,7 @@ class CodeGenerator {
             // Left operand: @var@ -> get_top_by_name, numeric literal -> string literal, stack name -> get_top
             std::string l;
             if (is_variable(instr.arg1)) {
-                l = "get_top_by_name(\"" + var_base_name(instr.arg1) + "")";
+                l = "get_top_by_name(\"" + var_base_name(instr.arg1) + "\")";
             } else if (std::isdigit((unsigned char)instr.arg1[0])) {
                 l = "\"" + instr.arg1 + "\"";
             } else {
@@ -448,7 +448,7 @@ class CodeGenerator {
             // Right operand: @var@ -> get_top_by_name, numeric literal -> string literal, stack name -> get_top
             std::string r;
             if (is_variable(instr.arg2)) {
-                r = "get_top_by_name(\"" + var_base_name(instr.arg2) + "")";
+                r = "get_top_by_name(\"" + var_base_name(instr.arg2) + "\")";
             } else if (std::isdigit((unsigned char)instr.arg2[0])) {
                 r = "\"" + instr.arg2 + "\"";
             } else {
