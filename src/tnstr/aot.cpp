@@ -436,13 +436,25 @@ class CodeGenerator {
         if (instr.type == "cal") return instr.arg1 + "();";
         
         if (instr.type == "jmp") {
-            std::string l = is_variable(instr.arg1)
-                ? ("get_top_by_name(\"" + var_base_name(instr.arg1) + "\")")
-                : ("get_top(&" + instr.arg1 + ")");
-            std::string r = is_variable(instr.arg2)
-                ? ("get_top_by_name(\"" + var_base_name(instr.arg2) + "\")")
-                : ("get_top(&" + instr.arg2 + ")");
-            return "if (compare_values(" + l + ", " + r + ", \"" + instr.arg3 + "\")) " + instr.arg4 + "();";
+            // Left operand: @var@ -> get_top_by_name, numeric literal -> string literal, stack name -> get_top
+            std::string l;
+            if (is_variable(instr.arg1)) {
+                l = "get_top_by_name(\"" + var_base_name(instr.arg1) + "")";
+            } else if (std::isdigit((unsigned char)instr.arg1[0])) {
+                l = "\"" + instr.arg1 + "\"";
+            } else {
+                l = "get_top(&" + instr.arg1 + ")";
+            }
+            // Right operand: @var@ -> get_top_by_name, numeric literal -> string literal, stack name -> get_top
+            std::string r;
+            if (is_variable(instr.arg2)) {
+                r = "get_top_by_name(\"" + var_base_name(instr.arg2) + "")";
+            } else if (std::isdigit((unsigned char)instr.arg2[0])) {
+                r = "\"" + instr.arg2 + "\"";
+            } else {
+                r = "get_top(&" + instr.arg2 + ")";
+            }
+            return "if (compare_values(" + l + ", " + r + ", \"" + instr.arg3 + "")) " + instr.arg4 + "();";
         }
         return "";
     }
