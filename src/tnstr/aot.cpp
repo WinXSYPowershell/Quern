@@ -811,6 +811,10 @@ public:
                 std::string code = generate_instr(instr);
                 if (!code.empty()) ss << "    " << code << "\n";
             }
+            // If this is the exit function, add exit(0); to ensure proper program termination
+            if (unquote(pair.first) == "exit") {
+                ss << "    exit(0);\n";
+            }
             ss << "}\n\n";
         }
 
@@ -838,7 +842,12 @@ public:
                 ss << "    free_stack(&" << sanitize_c_id(name) << ");\n";
             }
         }
-        
+
+        // If exit function exists, call it (exit function will call exit(0))
+        if (prog.functions.count("exit")) {
+            ss << "    qb_exit();\n";
+        }
+
         ss << "    return 0;\n}\n";
 
         return ss.str();
