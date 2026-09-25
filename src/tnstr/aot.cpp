@@ -297,14 +297,24 @@ public:
             size_t col = 0;
             
             while (line_stream >> word) {
-                // Simple tokenizer: splits by whitespace
-                // Note: This doesn't handle quoted strings "Hello World" as single token yet,
-                // but our 'out' handler above solves the specific problem.
-                tokens.push_back({word, line_idx, col});
-                col += word.length() + 1;
+                std::string remaining = word;
+                while (!remaining.empty()) {
+                    size_t brace_pos = remaining.find_first_of("{}");
+                    if (brace_pos == std::string::npos) {
+                        tokens.push_back({remaining, line_idx, col});
+                        col += remaining.size();
+                        remaining.clear();
+                    } else {
+                        if (brace_pos > 0) {
+                            tokens.push_back({remaining.substr(0, brace_pos), line_idx, col});
+                            col += brace_pos;
+                        }
+                        tokens.push_back({std::string(1, remaining[brace_pos]), line_idx, col});
+                        col++;
+                        remaining = remaining.substr(brace_pos + 1);
+                    }
+                }
             }
-            line_idx++;
-        }
     }
 
     Program parse() {
