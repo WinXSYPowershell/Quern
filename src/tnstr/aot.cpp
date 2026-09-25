@@ -71,7 +71,7 @@ ComparisonOp parse_comparison_op(const std::string& s) {
     if (s == "!=") return ComparisonOp::NotEqual;
     if (s == "<") return ComparisonOp::LessThan;
     if (s == ">") return ComparisonOp::GreaterThan;
-    if (s == "=<") return ComparisonOp::LessEqual;
+    if (s == "<=") return ComparisonOp::LessEqual;
     if (s == ">=") return ComparisonOp::GreaterEqual;
     throw std::runtime_error("Unknown op");
 }
@@ -82,7 +82,7 @@ std::string comparison_op_to_str(ComparisonOp op) {
         case ComparisonOp::NotEqual: return "!=";
         case ComparisonOp::LessThan: return "<";
         case ComparisonOp::GreaterThan: return ">";
-        case ComparisonOp::LessEqual: return "=<";
+        case ComparisonOp::LessEqual: return "<=";
         case ComparisonOp::GreaterEqual: return ">=";
     }
     return "";
@@ -464,7 +464,7 @@ class CodeGenerator {
                     std::string literal = content.substr(pos, start - pos);
                     code += "printf(\"" + escape_c_string(literal) + "\");";
                 }
-                code += "printf(\"%s\", get_top_by_name(\"" + var_name + "\");)";
+                code += "printf(\"%s\", get_top_by_name(\"" + var_name + "\"));";
                 pos = end + 1;
             }
             return code;
@@ -610,7 +610,7 @@ int compare_stacks(Stack* l, Stack* r, const char* op) {
         if (strcmp(op, "!=") == 0) return (ln - rn) >= 1e-9 || (ln - rn) <= -1e-9;
         if (strcmp(op, "<") == 0) return ln < rn;
         if (strcmp(op, ">") == 0) return ln > rn;
-        if (strcmp(op, "=<") == 0) return ln <= rn;
+        if (strcmp(op, "<=") == 0) return ln <= rn;
         if (strcmp(op, ">=") == 0) return ln >= rn;
     } else {
         int cmp = strcmp(lv, rv);
@@ -618,7 +618,7 @@ int compare_stacks(Stack* l, Stack* r, const char* op) {
         if (strcmp(op, "!=") == 0) return cmp != 0;
         if (strcmp(op, "<") == 0) return cmp < 0;
         if (strcmp(op, ">") == 0) return cmp > 0;
-        if (strcmp(op, "=<") == 0) return cmp <= 0;
+        if (strcmp(op, "<=") == 0) return cmp <= 0;
         if (strcmp(op, ">=") == 0) return cmp >= 0;
     }
     return 0;
@@ -739,15 +739,7 @@ void psh_arith(const char* name, const char* op, const char* operand) {
     if (res == (long long)res) snprintf(buf, sizeof(buf), "%lld", (long long)res);
     else                       snprintf(buf, sizeof(buf), "%g", res);
     var_set(name, buf);
-    // Fix: sync physical stack top so get_top_by_name returns updated value
-    Stack* __psh_arith_s = find_stack(name);
-    if (__psh_arith_s != NULL) {
-        if (__psh_arith_s->size > 0) {
-            free(__psh_arith_s->items[__psh_arith_s->size - 1]);
-            __psh_arith_s->size--;
-        }
-        push_stack(__psh_arith_s, buf);
-    }
+
 }
 
 int compare_values(const char* lv, const char* rv, const char* op) {
@@ -762,7 +754,7 @@ int compare_values(const char* lv, const char* rv, const char* op) {
         if (strcmp(op, "!=") == 0) return (ln - rn) >= 1e-9 || (ln - rn) <= -1e-9;
         if (strcmp(op, "<") == 0) return ln < rn;
         if (strcmp(op, ">") == 0) return ln > rn;
-        if (strcmp(op, "=<") == 0) return ln <= rn;
+        if (strcmp(op, "<=") == 0) return ln <= rn;
         if (strcmp(op, ">=") == 0) return ln >= rn;
     } else {
         int cmp = strcmp(lv, rv);
@@ -770,7 +762,7 @@ int compare_values(const char* lv, const char* rv, const char* op) {
         if (strcmp(op, "!=") == 0) return cmp != 0;
         if (strcmp(op, "<") == 0) return cmp < 0;
         if (strcmp(op, ">") == 0) return cmp > 0;
-        if (strcmp(op, "=<") == 0) return cmp <= 0;
+        if (strcmp(op, "<=") == 0) return cmp <= 0;
         if (strcmp(op, ">=") == 0) return cmp >= 0;
     }
     return 0;
