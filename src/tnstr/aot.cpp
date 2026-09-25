@@ -259,19 +259,7 @@ class Parser {
         } else if (cmd == "fnc") {
             consume("fnc");
             std::string func_name = next_arg();
-            // Remove trailing { if attached
-            bool brace_attached = false;
-            while (!func_name.empty() && func_name.back() == '{') {
-                func_name.pop_back();
-                brace_attached = true;
-            }
-            // Strip surrounding quotes
-            if (func_name.size() >= 2 && func_name.front() == '"' && func_name.back() == '"') {
-                func_name = func_name.substr(1, func_name.size() - 2);
-            }
-            if (!brace_attached) {
-                consume("{");
-            }
+            consume("{");
             std::vector<Instruction> body;
             while (has_next() && peek() != "}") {
                 Instruction instr = parse_instruction(functions);
@@ -439,15 +427,36 @@ class CodeGenerator {
         }
         
         if (instr.type == "out_lit") {
-            // Handle @var@ substitution via out_with_vars runtime function
             std::string content = instr.arg2;
-            // Remove outer quotes
+            // Remove surrounding quotes
             if (content.size() >= 2 && content.front() == '"' && content.back() == '"') {
                 content = content.substr(1, content.size() - 2);
             }
-            // Escape special chars and pass to out_with_vars
-            std::string escaped = escape_c_string(content);
-            return "out_with_vars(\"" + escaped + "\");";
+            // Scan for @var@ patterns and generate code
+            std::string code;
+            size_t pos = 0;
+            while (pos < content.size()) {
+                size_t start = content.find('@', pos);
+                if (start == std::string::npos) {
+                    std::string literal = content.substr(pos);
+                    code += "printf(\"" + escape_c_string(literal) + "\");";
+                    break;
+                }
+                size_t end = content.find('@', start + 1);
+                if (end == std::string::npos) {
+                    std::string literal = content.substr(pos);
+                    code += "printf(\"" + escape_c_string(literal) + "\");";
+                    break;
+                }
+                std::string var_name = content.substr(start + 1, end - start - 1);
+                if (start > pos) {
+                    std::string literal = content.substr(pos, start - pos);
+                    code += "printf(\"" + escape_c_string(literal) + "\");";
+                }
+                code += "printf(\"%s\", get_top_by_name(\"" + var_name + "\");";
+                pos = end + 1;
+            }
+            return code;
         }
         
         if (instr.type == "otn") return "printf(\"\\n\");";
@@ -746,43 +755,6 @@ int compare_values(const char* lv, const char* rv, const char* op) {
     }
     return 0;
 }
-
-// out_with_vars: print a string with @var@ patterns replaced by variable values
-void out_with_vars(const char* s) {
-    while (*s) {
-        if (s[0] == '@' && s[1] != '\0') {
-            const char* start = s + 1;
-            // Manually search for closing @
-            const char* end = NULL;
-            for (const char* p = start; *p; ++p) {
-                if (*p == '@') {
-                    end = p;
-                    break;
-                }
-            }
-            if (end != NULL) {
-                char var_name[256];
-                size_t len = (size_t)(end - start);
-                if (len >= sizeof(var_name)) len = sizeof(var_name) - 1;
-                strncpy(var_name, start, len);
-                var_name[len] = '\0';
-                const char* val = get_top_by_name(var_name);
-                if (val) {
-                    printf("%s ", val);
-                } else {
-                    // Print undefined placeholder char by char
-                    putchar('('); putchar('u'); putchar('n'); putchar('d');
-                    putchar('e'); putchar('f'); putchar('i'); putchar('n');
-                    putchar('e'); putchar(')'); putchar(' ');
-                }
-                s = end + 1;
-                continue;
-            }
-        }
-        putchar(*s++);
-    }
-    putchar(' ');
-}
 )";
     }
 
@@ -823,10 +795,6 @@ public:
         // Function definitions
         for (const auto& pair : prog.functions) {
             ss << "void " << qb_func_name(pair.first) << "() {\n";
-            // Special handling: the "exit" function should terminate the program
-            if (unquote(pair.first) == "exit") {
-                ss << "    exit(0);\n";
-            }
             for (const auto& instr : pair.second) {
                 std::string code = generate_instr(instr);
                 if (!code.empty()) ss << "    " << code << "\n";
@@ -882,14 +850,14 @@ int run_command(const std::string& cmd) {
 
 bool check_clang() {
 #ifdef _WIN32
-    return run_command("g++ --version >nul 2>&1") == 0;
+    return run_command("clang --version >nul 2>&1") == 0;
 #else
-    return run_command("command -v g++ >/dev/null 2>&1") == 0;
+    return run_command("command -v clang >/dev/null 2>&1") == 0;
 #endif
 }
 
 void download_toolchain() {
-    std::cout << "g++ not found. Attempting to download/install..." << std::endl;
+    std::cout << "Clang not found. Attempting to download/install..." << std::endl;
 #ifdef _WIN32
     std::string cmd = 
         "powershell -Command \""
@@ -904,7 +872,7 @@ void download_toolchain() {
         "exit 1 "
         "}\"";
     if (run_command(cmd) != 0) {
-        std::cerr << "Failed to download/install g++. Please install it manually." << std::endl;
+        std::cerr << "Failed to download/install Clang. Please install it manually." << std::endl;
         exit(1);
     }
     std::cout << "Installation complete. You may need to restart your terminal for PATH to update." << std::endl;
@@ -915,11 +883,11 @@ void download_toolchain() {
     }
     #else
     if (run_command("command -v apt-get >/dev/null 2>&1") == 0) {
-        run_command("sudo apt-get update && sudo apt-get install -y g++");
+        run_command("sudo apt-get update && sudo apt-get install -y clang");
     } else if (run_command("command -v dnf >/dev/null 2>&1") == 0) {
-        run_command("sudo dnf install -y gcc-c++");
+        run_command("sudo dnf install -y clang");
     } else if (run_command("command -v pacman >/dev/null 2>&1") == 0) {
-        run_command("sudo pacman -S --noconfirm gcc");
+        run_command("sudo pacman -S --noconfirm clang");
     } else {
         std::cerr << "Package manager not found. Please install Clang manually." << std::endl;
         exit(1);
@@ -930,7 +898,7 @@ void download_toolchain() {
 
 std::string build_clang_cmd(const std::string& c_file, const std::string& out_file, const CompilerOptions& opts) {
     std::stringstream cmd;
-    cmd << "g++ -std=c++17 -O2 " << c_file << " -o " << out_file;
+    cmd << "clang " << c_file << " -o " << out_file;
     cmd << " " << opts.optimization;
     
     if (opts.force_warn) cmd << " -Werror";
@@ -982,7 +950,7 @@ int main(int argc, char* argv[]) {
     if (!check_clang()) {
         download_toolchain();
         if (!check_clang()) {
-            std::cerr << "g++ is still not found after installation attempt. Please install it manually and ensure it's in PATH." << std::endl;
+            std::cerr << "Clang is still not found after installation attempt. Please install manually and ensure it's in PATH." << std::endl;
             return 1;
         }
     }
