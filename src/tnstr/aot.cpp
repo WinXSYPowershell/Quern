@@ -379,7 +379,7 @@ class CodeGenerator {
     }
 
     std::string generate_instr(const Instruction& instr) const {
-        if (instr.type == "crt") return "init_stack(&" + sanitize_c_id(instr.arg1) + ");";
+        if (instr.type == "crt") return "";  // Stack init handled in main() loop
         
         // 辅助 lambda：去除首尾引号并转义
         auto process_string = [](const std::string& s) -> std::string {
@@ -464,7 +464,7 @@ class CodeGenerator {
                     std::string literal = content.substr(pos, start - pos);
                     code += "printf(\"" + escape_c_string(literal) + "\");";
                 }
-                code += "printf(\"%s\", get_top_by_name(\"" + var_name + "\");";
+                code += "printf(\"%s\", get_top_by_name(\"" + var_name + "\");)";
                 pos = end + 1;
             }
             return code;
@@ -739,6 +739,15 @@ void psh_arith(const char* name, const char* op, const char* operand) {
     if (res == (long long)res) snprintf(buf, sizeof(buf), "%lld", (long long)res);
     else                       snprintf(buf, sizeof(buf), "%g", res);
     var_set(name, buf);
+    // Fix: sync physical stack top so get_top_by_name returns updated value
+    Stack* __psh_arith_s = find_stack(name);
+    if (__psh_arith_s != NULL) {
+        if (__psh_arith_s->size > 0) {
+            free(__psh_arith_s->items[__psh_arith_s->size - 1]);
+            __psh_arith_s->size--;
+        }
+        push_stack(__psh_arith_s, buf);
+    }
 }
 
 int compare_values(const char* lv, const char* rv, const char* op) {
