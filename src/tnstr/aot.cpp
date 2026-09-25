@@ -316,6 +316,7 @@ public:
                 }
             }
     }
+    }
 
     Program parse() {
         Program prog;
