@@ -50,12 +50,13 @@ Set-Location $Paths.root
 # --- Rust 部分 ---
 if ($Targets.rust_windows) {
     Invoke-BuildStep "Rust (Windows) Quern Launcher & Qvm" { 
+        $RustBin = $Tools.rust
         Copy-Item "$($Paths.root)\buildtargets\1\main.rs" "$($Paths.root)\src\main.rs" -Force
-        cargo build --release 
+        & $RustBin build --release 
         Safe-Move "$($Paths.root)\target\release\Quern_cargo.exe" "$($Paths.template)\Windows\Qvm.exe"
 
         Copy-Item "$($Paths.root)\buildtargets\2\main.rs" "$($Paths.root)\src\main.rs" -Force
-        cargo build --release 
+        & $RustBin build --release 
         Safe-Move "$($Paths.root)\target\release\Quern_cargo.exe" "$($Paths.template)\Windows\Quern.exe"
     }
 }

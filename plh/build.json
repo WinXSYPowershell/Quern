@@ -8,7 +8,8 @@
   "tools": {
     "go": "F:/Apps/Coding/Go/bin/go.exe",
     "seven_zip": "D:/7-Zip/7z.exe",
-    "inno_setup": "F:/InnoSetup7/ISCC.exe"
+    "inno_setup": "F:/InnoSetup7/ISCC.exe",
+    "rust": "F:/.cargo/bin/cargo.exe"
   },
   "targets": {
     "rust_windows": true,
