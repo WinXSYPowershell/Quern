@@ -811,9 +811,10 @@ public:
                 std::string code = generate_instr(instr);
                 if (!code.empty()) ss << "    " << code << "\n";
             }
-            // If this is the exit function, add exit(0); to ensure proper program termination
+            // If this is the exit function, add return 0; to ensure proper program termination
+            // becurse the exit function is the end of the last function, if use the exit(0); the program will exit early and not run the rast of code and not free the stacks.
             if (unquote(pair.first) == "exit") {
-                ss << "    exit(0);\n";
+                ss << "    return 0;\n";
             }
             ss << "}\n\n";
         }
