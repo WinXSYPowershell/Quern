@@ -6,7 +6,7 @@ struct Args {
     /// The script file to process (e.g., basic.q)
     #[arg(index = 1)]
     pub script_name: String,
-    
+
     /// RunScripts: Quernc --run <ScriptName.q>
     #[arg(long)]
     run: Option<String>,
@@ -62,39 +62,4 @@ struct Args {
     /// Qlm install all modules
     #[arg(long)]
     module_install_all: bool, // 类型是 bool
-
-
-    // --- AOT Build Parameters ---
-
-    /// Translate to Clang -Os
-    #[arg(long, default_value_t = false)]
-    aot_clang_o_size: bool,
-
-    /// Translate to Clang -Oz
-    #[arg(long, default_value_t = false)]
-    aot_clang_o_size_best: bool,
-
-    /// Translate to Clang -Og
-    #[arg(long, default_value_t = false)]
-    aot_clang_o_debug: bool,
-
-    /// Translate to Clang -Ofast
-    #[arg(long, default_value_t = false)]
-    aot_clang_ofast: bool,
-
-    /// Translate to Clang -O0
-    #[arg(long, default_value_t = false)]
-    aot_not_o: bool,
-
-    /// C code verbose compilation
-    #[arg(long, default_value_t = false)]
-    aot_c_verbose: bool,
-
-    /// Treat warnings as errors
-    #[arg(long, default_value_t = false)]
-    aot_force_warn: bool,
-
-    /// Suppress warnings
-    #[arg(long, default_value_t = false)]
-    aot_no_warn: bool,
 }
