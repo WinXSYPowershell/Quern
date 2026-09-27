@@ -1,5 +1,6 @@
 include!("logger/modules.rs");
 include!("logger/args.rs");
+include!("logger/arg_logics.rs");
 
 fn main() {
     let args = Args::parse();
@@ -79,4 +80,3 @@ fn main() {
 }
 
 include!("logger/traceing.rs");
-include!("logger/arg_logics.rs");
