@@ -35,7 +35,7 @@ fn main() {
     };
 
     if operation.is_none() {
-        eprintln!("Error: No operation specified. Use --run, --vm-verbose, --vm-check, --module-install, --module-delete, --module-disable, --module-enable, --web-list ,--web-search, --local-list, --module-install, --help, or --qvm-run.");
+        eprintln!("Error: No operation specified. Use --help for usage information.");
         std::process::exit(1);
     }
 
@@ -64,7 +64,7 @@ fn main() {
         "LocalList" => execute_local_list(&script_name, &trace_id),
         "WebSearch" => execute_web_search(&script_name, &trace_id),
         "ModuleInstallAll" => execute_module_install_all(&script_name, &trace_id),
-        "AOTBuild" => execute_aot_build(&script_name, &trace_id),
+        "AOTBuild" => execute_aot_build(&script_name, &trace_id, &args),
         _ => Err(format!("Unknown mode: {}", mode)),
     };
 

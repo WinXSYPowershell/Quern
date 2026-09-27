@@ -257,11 +257,41 @@ fn execute_module_install_all(_script_name: &str, trace_id: &str) -> Result<(), 
     Ok(())
 }
 
-/// Execute AOT Build
+/// Execute AOT Build - Two-step process: Quernc -> QuernBuild
 fn execute_aot_build(script: &str, trace_id: &str, args: &Args) -> Result<(), String> {
-    info!(trace_id = trace_id, "Executing AOT build for script: {}", script);
+    info!(trace_id = trace_id, "Starting AOT build for script: {}", script);
 
-    // Determine optimization level
+    // Extract filename without extension
+    let file_stem = std::path::Path::new(script)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| "Invalid script path".to_string())?;
+
+    // Define output paths
+    let bytecode_path = format!("./cache/bytecode/{}.qb", file_stem);
+    
+    // Ensure cache directory exists
+    std::fs::create_dir_all("./cache/bytecode")
+        .map_err(|e| format!("Failed to create cache directory: {}", e))?;
+
+    // Step 1: Run Quernc to translate .q to .qb
+    info!(trace_id = trace_id, "Step 1: Running Quernc to generate bytecode...");
+    
+    let quernc_output = Command::new("Quernc")
+        .arg("--Run")
+        .arg(script)
+        .output()
+        .map_err(|e| format!("Failed to execute Quernc: {}", e))?;
+
+    if !quernc_output.status.success() {
+        let stderr = String::from_utf8_lossy(&quernc_output.stderr);
+        error!(trace_id = trace_id, "Quernc failed: {}", stderr);
+        return Err(format!("Quernc translation failed"));
+    }
+
+    info!(trace_id = trace_id, "Quernc completed successfully. Bytecode at: {}", bytecode_path);
+
+    // Step 2: Determine optimization level for QuernBuild
     let opt_flag = if args.aot_clang_o_size {
         "--ClangOSize"
     } else if args.aot_clang_o_size_best {
@@ -269,29 +299,40 @@ fn execute_aot_build(script: &str, trace_id: &str, args: &Args) -> Result<(), St
     } else if args.aot_clang_o_debug {
         "--ClangODebug"
     } else if args.aot_clang_ofast {
-        "--ClangOFast"
+        "--ClangOFAST"
     } else if args.aot_not_o {
         "--NotO"
     } else {
-        "--ClangOSize" // Default to --ClangOSize if no flag specified
+        "--ClangOSize" // Default to -Os
     };
 
-    // Build Quernc command
+    // Step 3: Run QuernBuild with the bytecode file
+    info!(trace_id = trace_id, "Step 2: Running QuernBuild with {}...", opt_flag);
+    
     let mut cmd = Command::new("QuernBuild");
-       .arg(script)
-       .arg(&format!("--opt-level={}", opt_flag));
-
-    // Execute
-    let output = cmd.output()
-        .map_err(|e| format!("Failed to execute AOT build: {}", e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        error!(trace_id = trace_id, "AOT build failed: {}", stderr);
-        return Err(format!("AOT build exited with error code: {}", output.status));
+    cmd.arg(opt_flag).arg(&bytecode_path);
+    
+    // Add optional flags
+    if args.aot_c_verbose {
+        cmd.arg("--CVerbose");
+    }
+    if args.aot_force_warn {
+        cmd.arg("--ForceWarn");
+    }
+    if args.aot_no_warn {
+        cmd.arg("--NoWarn");
     }
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    info!(trace_id = trace_id, "AOT build successful. Output:\n{}", stdout);
+    let build_output = cmd.output()
+        .map_err(|e| format!("Failed to execute QuernBuild: {}", e))?;
+
+    if !build_output.status.success() {
+        let stderr = String::from_utf8_lossy(&build_output.stderr);
+        error!(trace_id = trace_id, "QuernBuild failed: {}", stderr);
+        return Err(format!("QuernBuild compilation failed"));
+    }
+
+    let stdout = String::from_utf8_lossy(&build_output.stdout);
+    info!(trace_id = trace_id, "AOT build successful!\n{}", stdout);
     Ok(())
 }
