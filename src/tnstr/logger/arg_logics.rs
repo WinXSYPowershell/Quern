@@ -256,3 +256,42 @@ fn execute_module_install_all(_script_name: &str, trace_id: &str) -> Result<(), 
     info!(trace_id = trace_id, "Qlm.exe output: {}", stdout);
     Ok(())
 }
+
+/// Execute AOT Build
+fn execute_aot_build(script: &str, trace_id: &str, args: &Args) -> Result<(), String> {
+    info!(trace_id = trace_id, "Executing AOT build for script: {}", script);
+
+    // Determine optimization level
+    let opt_flag = if args.aot_clang_o_size {
+        "--ClangOSize"
+    } else if args.aot_clang_o_size_best {
+        "--ClangOSizeBest"
+    } else if args.aot_clang_o_debug {
+        "--ClangODebug"
+    } else if args.aot_clang_ofast {
+        "--ClangOFast"
+    } else if args.aot_not_o {
+        "--NotO"
+    } else {
+        "--ClangOSize" // Default to --ClangOSize if no flag specified
+    };
+
+    // Build Quernc command
+    let mut cmd = Command::new("QuernBuild");
+       .arg(script)
+       .arg(&format!("--opt-level={}", opt_flag));
+
+    // Execute
+    let output = cmd.output()
+        .map_err(|e| format!("Failed to execute AOT build: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        error!(trace_id = trace_id, "AOT build failed: {}", stderr);
+        return Err(format!("AOT build exited with error code: {}", output.status));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    info!(trace_id = trace_id, "AOT build successful. Output:\n{}", stdout);
+    Ok(())
+}
