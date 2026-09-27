@@ -3,6 +3,10 @@
 #[command(name = "QuerncLauncher")]
 #[command(about = "A launcher for Quernc and Qvm scripts with AOT support")]
 struct Args {
+    /// The script file to process (e.g., basic.q)
+    #[arg(index = 1)]
+    pub script_name: String,
+    
     /// RunScripts: Quernc --run <ScriptName.q>
     #[arg(long)]
     run: Option<String>,
@@ -54,7 +58,7 @@ struct Args {
     /// Qlm list local modules
     #[arg(long)]
     local_list: bool, // 类型是 bool
-
+    
     /// Qlm install all modules
     #[arg(long)]
     module_install_all: bool, // 类型是 bool
