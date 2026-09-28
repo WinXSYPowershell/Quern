@@ -68,6 +68,15 @@ fn main() {
         _ => Err(format!("Unknown mode: {}", mode)),
     };
 
+    match arg_logics::parse_args() {
+        Ok(_) => {
+            // Success
+        }
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    }
     match result {
         Ok(_) => {
             info!("All commands executed successfully.");

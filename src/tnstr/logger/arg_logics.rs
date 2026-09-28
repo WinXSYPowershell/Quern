@@ -1,5 +1,8 @@
 /// 执行 Quernc 编译，支持 AOT 参数
 
+use crate::args::Cli;
+use clap::Parser;
+
 /// Optimization levels for AOT build
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OptLevel {
@@ -11,6 +14,35 @@ pub enum OptLevel {
     Size,
     /// Balanced size and speed optimization
     SizeFast,
+}
+
+pub fn parse_args() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::parse();
+
+    match cli.command {
+        crate::args::Commands::AotBuild { not_o, script_name, input_q } => {
+            println!("Executing AOT build...");
+            println!("Not O: {}", not_o);
+            println!("Script Name: {}", script_name);
+            
+            if let Some(q_file) = input_q {
+                println!("Input Q: {}", q_file);
+            } else {
+                println!("No additional Input Q specified.");
+            }
+
+            // Here you would call your actual AOT build logic
+            // perform_aot_build(&script_name, &q_file, not_o)?;
+        }
+        crate::args::Commands::Help => {
+            // You can print help manually if needed, or let clap handle it
+            // By default, clap handles --help automatically.
+            // If you reach here, it means someone called 'help' subcommand explicitly.
+            println!("Use --help for usage information.");
+        }
+    }
+
+    Ok(())
 }
 
 impl std::str::FromStr for OptLevel {

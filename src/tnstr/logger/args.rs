@@ -6,6 +6,33 @@ use clap::{Parser, Subcommand};
 #[command(name = "QuerncLauncher")]
 #[command(about = "A launcher for Quernc and Qvm scripts with AOT support")]
 
+pub struct Cli {
+    #[command(subcommand)]
+    pub command: Commands,
+}
+
+#[derive(Subcommand)]
+pub enum Commands {
+    /// Build the script to AOT (Ahead-of-Time) code
+    #[command(name = "aot-build")]
+    AotBuild {
+        /// Output directory or flag (if you want to use --not-o as a separate flag)
+        #[arg(short, long)]
+        not_o: bool,
+
+        /// The script name to build
+        script_name: String,
+
+        /// Optional input Q file
+        #[arg(required = false)]
+        input_q: Option<String>,
+    },
+    
+    // Add other subcommands if necessary, e.g., Run, Help
+    #[command(name = "help")]
+    Help,
+}
+
 pub struct QuernArgs {
     /// The script file to process (e.g., basic.q)
     #[arg(index = 1)]
