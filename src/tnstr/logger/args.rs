@@ -2,7 +2,8 @@
 #[derive(Parser, Debug)]
 #[command(name = "QuerncLauncher")]
 #[command(about = "A launcher for Quernc and Qvm scripts with AOT support")]
-struct Args {
+
+pub struct QuernArgs {
     /// The script file to process (e.g., basic.q)
     #[arg(index = 1)]
     pub script_name: String,

@@ -1,5 +1,7 @@
 /// 执行 Quernc 编译，支持 AOT 参数
 
+use super::args::QuernArgs;
+
 /// Optimization levels for AOT build
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OptLevel {
@@ -92,7 +94,7 @@ impl CliArgs {
     }
 }
 
-fn execute_quernc(script: &str, trace_id: &str, args: &Args) -> Result<(), String> {
+fn execute_quernc(script: &str, trace_id: &str, args: &QuernArgs) -> Result<(), String> {
     info!(trace_id = trace_id, "Executing Quernc with AOT options");
 
     let mut cmd = Command::new("Quernc");
@@ -163,18 +165,18 @@ fn execute_qvm(script: &str, extra_args: &[&str], trace_id: &str) -> Result<(), 
     Ok(())
 }
 
-fn execute_run(script: &str, trace_id: &str, args: &Args) -> Result<(), String> {
+fn execute_run(script: &str, trace_id: &str, args: &QuernArgs) -> Result<(), String> {
     execute_quernc(script, trace_id, args)?;
     Ok(())
 }
 
-fn execute_vm_verbose(script: &str, trace_id: &str, args: &Args) -> Result<(), String> {
+fn execute_vm_verbose(script: &str, trace_id: &str, args: &QuernArgs) -> Result<(), String> {
     execute_quernc(script, trace_id, args)?;
     execute_qvm(script, &["--verbose"], trace_id)?;
     Ok(())
 }
 
-fn execute_vm_check(script: &str, trace_id: &str, args: &Args) -> Result<(), String> {
+fn execute_vm_check(script: &str, trace_id: &str, args: &QuernArgs) -> Result<(), String> {
     execute_quernc(script, trace_id, args)?;
     execute_qvm(script, &["--check"], trace_id)?;
     Ok(())
@@ -349,7 +351,7 @@ fn execute_module_install_all(_script_name: &str, trace_id: &str) -> Result<(), 
 
 /// Execute AOT Build - Two-step process: Quernc -> QuernBuild
 /// 命令行用法: program --AOTBuild --NotO/OFast/OSize/OSizeBest <input.q>
-fn execute_aot_build(script: &str, trace_id: &str, args: &Args) -> Result<(), String> {
+fn execute_aot_build(script: &str, trace_id: &str, args: &QuernArgs) -> Result<(), String> {
     info!(trace_id = trace_id, "Starting AOT build for script: {}", script);
 
     // Extract filename without extension
