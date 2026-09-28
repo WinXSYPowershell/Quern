@@ -62,4 +62,9 @@ struct Args {
     /// Qlm install all modules
     #[arg(long)]
     module_install_all: bool, // 类型是 bool
+
+    /// Use QuernBuild to build scripts with AOT support
+    #[arg(long)]
+    pub aot_build: bool,
+    pub aot_optimization: Option<AotOptLevel>,
 }
