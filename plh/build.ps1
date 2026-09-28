@@ -59,6 +59,8 @@ if ($Targets.rust_windows) {
         # 删除旧的输出文件，强制重新编译
         Remove-Item "$TargetDir\Quern_cargo.exe" -ErrorAction SilentlyContinue
         Remove-Item "$TargetDir\*.d" -ErrorAction SilentlyContinue # 删除增量编译元数据
+        Write-Host "Current src/main.rs content:"
+        Get-Content "$($Paths.root)\src\main.rs"
         Write-Host "[INFO] Removed cache files of last build" -ForegroundColor Gray
         
         & $RustBin build --release 
@@ -71,6 +73,8 @@ if ($Targets.rust_windows) {
         # 再次删除，确保重新编译
         Remove-Item "$TargetDir\Quern_cargo.exe" -ErrorAction SilentlyContinue
         Remove-Item "$TargetDir\*.d" -ErrorAction SilentlyContinue
+        Write-Host "Current src/main.rs content:"
+        Get-Content "$($Paths.root)\src\main.rs"
         Write-Host "[INFO] Removed cache files of Qvm" -ForegroundColor Gray
         
         & $RustBin build --release 
