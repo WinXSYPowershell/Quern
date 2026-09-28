@@ -59,6 +59,7 @@ if ($Targets.rust_windows) {
         # 删除旧的输出文件，强制重新编译
         Remove-Item "$TargetDir\Quern_cargo.exe" -ErrorAction SilentlyContinue
         Remove-Item "$TargetDir\*.d" -ErrorAction SilentlyContinue # 删除增量编译元数据
+        Write-Host "[INFO] Removed cache files of last build" -ForegroundColor Gray
         
         & $RustBin build --release 
         
@@ -70,6 +71,7 @@ if ($Targets.rust_windows) {
         # 再次删除，确保重新编译
         Remove-Item "$TargetDir\Quern_cargo.exe" -ErrorAction SilentlyContinue
         Remove-Item "$TargetDir\*.d" -ErrorAction SilentlyContinue
+        Write-Host "[INFO] Removed cache files of Qvm" -ForegroundColor Gray
         
         & $RustBin build --release 
         
@@ -87,6 +89,7 @@ if ($Targets.rust_linux) {
         wsl rm -f "$TargetDir/Quern_cargo.exe" 2>$null
         wsl find "$TargetDir" -name "*.d" -delete 2>$null
         
+        Write-Host "[INFO] Building Qvm..." -ForegroundColor Gray
         wsl cargo build --release 
         
         Safe-Move "$TargetDir\Quern_cargo.exe" "$($Paths.template)\Windows\Qvm.exe"
@@ -96,6 +99,8 @@ if ($Targets.rust_linux) {
         Copy-Item "$($Paths.root)\buildtargets\2\main.rs" "$($Paths.root)\src\main.rs" -Force
         wsl rm -f "$TargetDir/Quern_cargo.exe" 2>$null
         wsl find "$TargetDir" -name "*.d" -delete 2>$null
+
+        Write-Host "[INFO] Building Quern..." -ForegroundColor Gray
         
         wsl cargo build --release 
         
