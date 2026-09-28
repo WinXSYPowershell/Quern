@@ -1,4 +1,7 @@
 /// Quernc 启动器
+
+use clap::{Parser, Subcommand};
+
 #[derive(Parser, Debug)]
 #[command(name = "QuerncLauncher")]
 #[command(about = "A launcher for Quernc and Qvm scripts with AOT support")]
