@@ -32,7 +32,6 @@ fn main() {
         Some(("LocalList", "".to_string()))
     } else if args.aot_build {
         Some(("AOTBuild", args.script_name.clone()))
-    }
     } else {
         None
     };
