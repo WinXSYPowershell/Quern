@@ -48,29 +48,58 @@ function Invoke-BuildStep($Name, $ScriptBlock) {
 Set-Location $Paths.root
 
 # --- Rust 部分 ---
+
 if ($Targets.rust_windows) {
     Invoke-BuildStep "Rust (Windows) Quern Launcher & Qvm" { 
         $RustBin = $Tools.rust
+        $TargetDir = "$($Paths.root)\target\release"
+        
+        # --- Build 1: Qvm ---
         Copy-Item "$($Paths.root)\buildtargets\1\main.rs" "$($Paths.root)\src\main.rs" -Force
+        # 删除旧的输出文件，强制重新编译
+        Remove-Item "$TargetDir\Quern_cargo.exe" -ErrorAction SilentlyContinue
+        Remove-Item "$TargetDir\*.d" -ErrorAction SilentlyContinue # 删除增量编译元数据
+        
         & $RustBin build --release 
-        Safe-Move "$($Paths.root)\target\release\Quern_cargo.exe" "$($Paths.template)\Windows\Qvm.exe"
+        
+        Safe-Move "$TargetDir\Quern_cargo.exe" "$($Paths.template)\Windows\Qvm.exe"
 
+        # --- Build 2: Quern ---
+        Write-Host "[INFO] Switching to Quern Launcher build target..." -ForegroundColor Gray
         Copy-Item "$($Paths.root)\buildtargets\2\main.rs" "$($Paths.root)\src\main.rs" -Force
+        # 再次删除，确保重新编译
+        Remove-Item "$TargetDir\Quern_cargo.exe" -ErrorAction SilentlyContinue
+        Remove-Item "$TargetDir\*.d" -ErrorAction SilentlyContinue
+        
         & $RustBin build --release 
-        Safe-Move "$($Paths.root)\target\release\Quern_cargo.exe" "$($Paths.template)\Windows\Quern.exe"
+        
+        Safe-Move "$TargetDir\Quern_cargo.exe" "$($Paths.template)\Windows\Quern.exe"
     }
 }
 
-
 if ($Targets.rust_linux) {
     Invoke-BuildStep "Rust (Linux) Quern Launcher & Qvm" { 
+        $TargetDir = "$($Paths.root)\target\release"
+        
+        # --- Build 1: Qvm ---
         Copy-Item "$($Paths.root)\buildtargets\1\main.rs" "$($Paths.root)\src\main.rs" -Force
+        # WSL 下可能需要用 wsl rm 来删除，或者确保路径一致
+        wsl rm -f "$TargetDir/Quern_cargo.exe" 2>$null
+        wsl find "$TargetDir" -name "*.d" -delete 2>$null
+        
         wsl cargo build --release 
-        Safe-Move "$($Paths.root)\target\release\Quern_cargo.exe" "$($Paths.template)\Windows\Qvm.exe"
+        
+        Safe-Move "$TargetDir\Quern_cargo.exe" "$($Paths.template)\Windows\Qvm.exe"
 
+        # --- Build 2: Quern ---
+        Write-Host "[INFO] Switching to Quern Launcher build target..." -ForegroundColor Gray
         Copy-Item "$($Paths.root)\buildtargets\2\main.rs" "$($Paths.root)\src\main.rs" -Force
+        wsl rm -f "$TargetDir/Quern_cargo.exe" 2>$null
+        wsl find "$TargetDir" -name "*.d" -delete 2>$null
+        
         wsl cargo build --release 
-        Safe-Move "$($Paths.root)\target\release\Quern_cargo.exe" "$($Paths.template)\Windows\Quern.exe"
+        
+        Safe-Move "$TargetDir\Quern_cargo.exe" "$($Paths.template)\Windows\Quern.exe"
     }
 }
 
