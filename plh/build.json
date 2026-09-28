@@ -14,12 +14,12 @@
   "targets": {
     "rust_windows": true,
     "rust_linux": true,
-    "cpp_windows": true,
-    "cpp_linux": true,
-    "go_windows": true,
-    "go_linux": true,
-    "go_macos_arm64": true,
-    "go_macos_amd64": true,
+    "cpp_windows": false,
+    "cpp_linux": false,
+    "go_windows": false,
+    "go_linux": false,
+    "go_macos_arm64": false,
+    "go_macos_amd64": false,
     "pack_zip": true,
     "pack_installer": true
   }
