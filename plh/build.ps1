@@ -55,12 +55,11 @@ if ($Targets.rust_windows) {
         $TargetDir = "$($Paths.root)\target\release"
         
         # --- Build 1: Qvm ---
-        Copy-Item "$($Paths.root)\buildtargets\1\main.rs" "$($Paths.root)\src\main.rs" -Force
         # 删除旧的输出文件，强制重新编译
         Remove-Item "$TargetDir\Quern_cargo.exe" -ErrorAction SilentlyContinue
         Remove-Item "$TargetDir\*.d" -ErrorAction SilentlyContinue # 删除增量编译元数据
-        Write-Host "Current src/main.rs content:"
-        Get-Content "$($Paths.root)\src\main.rs"
+        'include!("tnstr/qvm.rs");' | Out-File -FilePath "$($Paths.root)\src\main.rs" -Encoding utf8 -NoNewline
+        Get-Content "$($Paths.root)\src\main.rs" | Write-Host
         Write-Host "[INFO] Removed cache files of last build" -ForegroundColor Gray
         
         & $RustBin build --release 
@@ -69,13 +68,11 @@ if ($Targets.rust_windows) {
 
         # --- Build 2: Quern ---
         Write-Host "[INFO] Switching to Quern Launcher build target..." -ForegroundColor Gray
-        Copy-Item "$($Paths.root)\buildtargets\2\main.rs" "$($Paths.root)\src\main.rs" -Force
-        if ($LASTEXITCODE -eq 0) { "Copy completed successfully" } else { "Failed exit code: $LASTEXITCODE" }
+        'include!("tnstr/logger.rs");' | Out-File -FilePath "$($Paths.root)\src\main.rs" -Encoding utf8 -NoNewline
+        Get-Content "$($Paths.root)\src\main.rs" | Write-Host
         # 再次删除，确保重新编译
         Remove-Item "$TargetDir\Quern_cargo.exe" -ErrorAction SilentlyContinue
         Remove-Item "$TargetDir\*.d" -ErrorAction SilentlyContinue
-        Write-Host "Current src/main.rs content:"
-        Get-Content "$($Paths.root)\src\main.rs"
         Write-Host "[INFO] Removed cache files of Qvm" -ForegroundColor Gray
         
         & $RustBin build --release 
@@ -89,7 +86,6 @@ if ($Targets.rust_linux) {
         $TargetDir = "$($Paths.root)\target\release"
         
         # --- Build 1: Qvm ---
-        Copy-Item "$($Paths.root)\buildtargets\1\main.rs" "$($Paths.root)\src\main.rs" -Force
         # WSL 下可能需要用 wsl rm 来删除，或者确保路径一致
         wsl rm -f "$TargetDir/Quern_cargo.exe" 2>$null
         wsl find "$TargetDir" -name "*.d" -delete 2>$null
@@ -101,7 +97,6 @@ if ($Targets.rust_linux) {
 
         # --- Build 2: Quern ---
         Write-Host "[INFO] Switching to Quern Launcher build target..." -ForegroundColor Gray
-        Copy-Item "$($Paths.root)\buildtargets\2\main.rs" "$($Paths.root)\src\main.rs" -Force
         wsl rm -f "$TargetDir/Quern_cargo.exe" 2>$null
         wsl find "$TargetDir" -name "*.d" -delete 2>$null
 
