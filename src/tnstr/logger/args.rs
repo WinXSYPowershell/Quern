@@ -53,18 +53,51 @@ struct Args {
 
     /// Qlm list cloud modules
     #[arg(long)]
-    web_list: bool, // 类型是 bool
+    web_list: bool,
 
     /// Qlm list local modules
     #[arg(long)]
-    local_list: bool, // 类型是 bool
-    
+    local_list: bool,
+
     /// Qlm install all modules
     #[arg(long)]
-    module_install_all: bool, // 类型是 bool
+    module_install_all: bool,
 
-    /// Use QuernBuild to build scripts with AOT support
+    // === AOT Build 参数 ===
+
+    /// Enable AOT build mode (--AOTBuild)
     #[arg(long)]
     pub aot_build: bool,
-    pub aot_optimization: Option<AotOptLevel>,
+
+    /// Disable optimizations (--NotO)
+    #[arg(long)]
+    pub not_o: bool,
+
+    /// Fast optimization (--OFast)
+    #[arg(long)]
+    pub ofast: bool,
+
+    /// Size optimization (--OSize)
+    #[arg(long)]
+    pub osize: bool,
+
+    /// Size and speed balanced optimization (--OSizeBest)
+    #[arg(long)]
+    pub osize_bast: bool,
+
+    /// Input Q file for AOT build (position 2)
+    #[arg(index = 2)]
+    pub input_q: Option<String>,
+
+    /// AOT C verbose output (--aot-c-verbose)
+    #[arg(long)]
+    pub aot_c_verbose: bool,
+
+    /// AOT force warnings (--aot-force-warn)
+    #[arg(long)]
+    pub aot_force_warn: bool,
+
+    /// AOT disable warnings (--aot-no-warn)
+    #[arg(long)]
+    pub aot_no_warn: bool,
 }

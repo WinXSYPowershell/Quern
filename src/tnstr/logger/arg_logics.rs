@@ -1,25 +1,115 @@
 /// 执行 Quernc 编译，支持 AOT 参数
+
+/// Optimization levels for AOT build
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OptLevel {
+    /// No optimization (default)
+    None,
+    /// Fast execution optimization
+    Fast,
+    /// Small code size optimization
+    Size,
+    /// Balanced size and speed optimization
+    SizeFast,
+}
+
+impl std::str::FromStr for OptLevel {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "o" | "none" => Ok(OptLevel::None),
+            "ofast" | "fast" => Ok(OptLevel::Fast),
+            "osize" | "size" => Ok(OptLevel::Size),
+            "osizebast" | "sizefast" => Ok(OptLevel::SizeFast),
+            _ => Err(format!("Invalid optimization level: {}", s)),
+        }
+    }
+}
+
+/// Arguments for AOT build command
+#[derive(Debug, Args, Clone)]
+pub struct AotBuildArgs {
+    /// Optimization level: O, OFast, OSize, OSizeBast
+    #[arg(short, long, default_value = "O", value_name = "LEVEL")]
+    pub opt_level: OptLevel,
+
+    /// Input Q file to compile
+    #[arg(value_name = "INPUT_Q", required = true)]
+    pub input_q: String,
+}
+
+/// Main command-line arguments (已合并到 Args 中，保留供旧代码兼容)
+#[derive(Debug, Parser)]
+pub struct CliArgs {
+    /// Enable AOT build mode
+    #[arg(long)]
+    pub aot_build: bool,
+
+    /// Disable optimizations
+    #[arg(long)]
+    pub not_o: bool,
+
+    /// Fast optimization
+    #[arg(long)]
+    pub ofast: bool,
+
+    /// Size optimization
+    #[arg(long)]
+    pub osize: bool,
+
+    /// Size and speed balanced optimization
+    #[arg(long)]
+    pub osize_bast: bool,
+
+    /// Input Q file
+    #[arg(value_name = "INPUT_Q")]
+    pub input_q: Option<String>,
+}
+
+impl CliArgs {
+    /// Determine the effective optimization level
+    pub fn get_optimization_level(&self) -> OptLevel {
+        if self.not_o {
+            return OptLevel::None;
+        }
+        if self.ofast {
+            return OptLevel::Fast;
+        }
+        if self.osize {
+            return OptLevel::Size;
+        }
+        if self.osize_bast {
+            return OptLevel::SizeFast;
+        }
+        // Default is None when no optimization flag is specified
+        OptLevel::None
+    }
+
+    /// Check if AOT build is requested
+    pub fn is_aot_build(&self) -> bool {
+        self.aot_build || self.input_q.is_some()
+    }
+}
+
 fn execute_quernc(script: &str, trace_id: &str, args: &Args) -> Result<(), String> {
     info!(trace_id = trace_id, "Executing Quernc with AOT options");
-    
+
     let mut cmd = Command::new("Quernc");
     cmd.arg("--run").arg(script);
 
-    // 添加 AOT 优化等级参数
-    if args.aot_clang_o_size {
-        cmd.arg("--clang-o-size");
+    // 添加 AOT 优化等级参数 (使用 Args 中的新字段)
+    if args.not_o {
+        cmd.arg("--not-o");
     }
-    if args.aot_clang_o_size_best {
-        cmd.arg("--clang-o-size-best");
-    }
-    if args.aot_clang_o_debug {
-        cmd.arg("--clang-o-debug");
-    }
-    if args.aot_clang_ofast {
+    if args.ofast {
         cmd.arg("--clang-ofast");
     }
-    if args.aot_not_o {
-        cmd.arg("--not-o");
+    if args.osize {
+        cmd.arg("--clang-o-size");
+    }
+    if args.osize_bast {
+        cmd.arg("--clang-o-size-best");
     }
 
     // 添加其他 AOT 标志
@@ -41,7 +131,7 @@ fn execute_quernc(script: &str, trace_id: &str, args: &Args) -> Result<(), Strin
         error!(trace_id = trace_id, "Quernc failed: {}", stderr);
         return Err(format!("Quernc exited with error: {}", stderr));
     }
-    
+
     let stdout = String::from_utf8_lossy(&output.stdout);
     info!(trace_id = trace_id, "Quernc output: {}", stdout);
     Ok(())
@@ -49,7 +139,7 @@ fn execute_quernc(script: &str, trace_id: &str, args: &Args) -> Result<(), Strin
 
 fn execute_qvm(script: &str, extra_args: &[&str], trace_id: &str) -> Result<(), String> {
     info!(trace_id = trace_id, "Executing Qvm with args: {:?}", extra_args);
-    
+
     let mut cmd = Command::new("Qvm");
     // 始终添加 --run 参数
     cmd.arg("--run");
@@ -99,7 +189,7 @@ fn execute_qvm_run(script: &str, trace_id: &str) -> Result<(), String> {
 
 fn execute_module_install(module_name: &str, trace_id: &str) -> Result<(), String> {
     info!(trace_id = trace_id, "Executing Qlm.exe to install module: {}", module_name);
-    
+
     let mut cmd = Command::new("Qlm.exe");
     cmd.arg("--install").arg(module_name);
 
@@ -119,7 +209,7 @@ fn execute_module_install(module_name: &str, trace_id: &str) -> Result<(), Strin
 
 fn execute_module_delete(module_name: &str, trace_id: &str) -> Result<(), String> {
     info!(trace_id = trace_id, "Executing Qlm.exe to delete module: {}", module_name);
-    
+
     let mut cmd = Command::new("Qlm.exe");
     cmd.arg("--delete").arg(module_name);
 
@@ -139,7 +229,7 @@ fn execute_module_delete(module_name: &str, trace_id: &str) -> Result<(), String
 
 fn execute_module_disable(module_name: &str, trace_id: &str) -> Result<(), String> {
     info!(trace_id = trace_id, "Executing Qlm.exe to disable module: {}", module_name);
-    
+
     let mut cmd = Command::new("Qlm.exe");
     cmd.arg("--disable").arg(module_name);
 
@@ -159,7 +249,7 @@ fn execute_module_disable(module_name: &str, trace_id: &str) -> Result<(), Strin
 
 fn execute_module_enable(module_name: &str, trace_id: &str) -> Result<(), String> {
     info!(trace_id = trace_id, "Executing Qlm.exe to enable module: {}", module_name);
-    
+
     let mut cmd = Command::new("Qlm.exe");
     cmd.arg("--enable").arg(module_name);
 
@@ -179,7 +269,7 @@ fn execute_module_enable(module_name: &str, trace_id: &str) -> Result<(), String
 
 fn execute_web_list(_script_name: &str, trace_id: &str) -> Result<(), String> {
     info!(trace_id = trace_id, "Executing Qlm.exe to list cloud modules");
-    
+
     let mut cmd = Command::new("Qlm.exe");
     cmd.arg("--web-list");
 
@@ -199,7 +289,7 @@ fn execute_web_list(_script_name: &str, trace_id: &str) -> Result<(), String> {
 
 fn execute_local_list(_script_name: &str, trace_id: &str) -> Result<(), String> {
     info!(trace_id = trace_id, "Executing Qlm.exe to list local modules");
-    
+
     let mut cmd = Command::new("Qlm.exe");
     cmd.arg("--mods-list");
 
@@ -219,7 +309,7 @@ fn execute_local_list(_script_name: &str, trace_id: &str) -> Result<(), String> 
 
 fn execute_web_search(search_query: &str, trace_id: &str) -> Result<(), String> {
     info!(trace_id = trace_id, "Executing Qlm.exe to search web modules with query: {}", search_query);
-    
+
     let mut cmd = Command::new("Qlm.exe");
     cmd.arg("--web-search").arg(search_query);
 
@@ -239,7 +329,7 @@ fn execute_web_search(search_query: &str, trace_id: &str) -> Result<(), String> 
 
 fn execute_module_install_all(_script_name: &str, trace_id: &str) -> Result<(), String> {
     info!(trace_id = trace_id, "Executing Qlm.exe to install all modules");
-    
+
     let mut cmd = Command::new("Qlm.exe");
     cmd.arg("--InstallPackage");
 
@@ -258,6 +348,7 @@ fn execute_module_install_all(_script_name: &str, trace_id: &str) -> Result<(), 
 }
 
 /// Execute AOT Build - Two-step process: Quernc -> QuernBuild
+/// 命令行用法: program --AOTBuild --NotO/OFast/OSize/OSizeBest <input.q>
 fn execute_aot_build(script: &str, trace_id: &str, args: &Args) -> Result<(), String> {
     info!(trace_id = trace_id, "Starting AOT build for script: {}", script);
 
@@ -269,14 +360,14 @@ fn execute_aot_build(script: &str, trace_id: &str, args: &Args) -> Result<(), St
 
     // Define output paths
     let bytecode_path = format!("./cache/bytecode/{}.qb", file_stem);
-    
+
     // Ensure cache directory exists
     std::fs::create_dir_all("./cache/bytecode")
         .map_err(|e| format!("Failed to create cache directory: {}", e))?;
 
     // Step 1: Run Quernc to translate .q to .qb
     info!(trace_id = trace_id, "Step 1: Running Quernc to generate bytecode...");
-    
+
     let quernc_output = Command::new("Quernc")
         .arg("--Run")
         .arg(script)
@@ -291,27 +382,25 @@ fn execute_aot_build(script: &str, trace_id: &str, args: &Args) -> Result<(), St
 
     info!(trace_id = trace_id, "Quernc completed successfully. Bytecode at: {}", bytecode_path);
 
-    // Step 2: Determine optimization level for QuernBuild
-    let opt_flag = if args.aot_clang_o_size {
-        "--ClangOSize"
-    } else if args.aot_clang_o_size_best {
-        "--ClangOSizeBest"
-    } else if args.aot_clang_o_debug {
-        "--ClangODebug"
-    } else if args.aot_clang_ofast {
-        "--ClangOFAST"
-    } else if args.aot_not_o {
+    // Step 2: Determine optimization level for QuernBuild (使用 Args 中的新字段)
+    let opt_flag = if args.not_o {
         "--NotO"
+    } else if args.ofast {
+        "--ClangOFAST"
+    } else if args.osize {
+        "--ClangOSize"
+    } else if args.osize_bast {
+        "--ClangOSizeBest"
     } else {
         "--ClangOSize" // Default to -Os
     };
 
     // Step 3: Run QuernBuild with the bytecode file
     info!(trace_id = trace_id, "Step 2: Running QuernBuild with {}...", opt_flag);
-    
+
     let mut cmd = Command::new("QuernBuild");
     cmd.arg(opt_flag).arg(&bytecode_path);
-    
+
     // Add optional flags
     if args.aot_c_verbose {
         cmd.arg("--CVerbose");
