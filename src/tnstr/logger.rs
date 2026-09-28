@@ -3,7 +3,7 @@ include!("logger/args.rs");
 include!("logger/arg_logics.rs");
 
 fn main() {
-    let args = Args::parse();
+    let args = QuernArgs::parse();  // <-- 修改这里
 
     // 确定操作模式和脚本名称
     let operation = if let Some(script) = &args.run {

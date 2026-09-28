@@ -1,7 +1,5 @@
 /// 执行 Quernc 编译，支持 AOT 参数
 
-use super::args::QuernArgs;
-
 /// Optimization levels for AOT build
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OptLevel {
@@ -26,71 +24,6 @@ impl std::str::FromStr for OptLevel {
             "osizebast" | "sizefast" => Ok(OptLevel::SizeFast),
             _ => Err(format!("Invalid optimization level: {}", s)),
         }
-    }
-}
-
-/// Arguments for AOT build command
-#[derive(Debug, Args, Clone)]
-pub struct AotBuildArgs {
-    /// Optimization level: O, OFast, OSize, OSizeBast
-    #[arg(short, long, default_value = "O", value_name = "LEVEL")]
-    pub opt_level: OptLevel,
-
-    /// Input Q file to compile
-    #[arg(value_name = "INPUT_Q", required = true)]
-    pub input_q: String,
-}
-
-/// Main command-line arguments (已合并到 Args 中，保留供旧代码兼容)
-#[derive(Debug, Parser)]
-pub struct CliArgs {
-    /// Enable AOT build mode
-    #[arg(long)]
-    pub aot_build: bool,
-
-    /// Disable optimizations
-    #[arg(long)]
-    pub not_o: bool,
-
-    /// Fast optimization
-    #[arg(long)]
-    pub ofast: bool,
-
-    /// Size optimization
-    #[arg(long)]
-    pub osize: bool,
-
-    /// Size and speed balanced optimization
-    #[arg(long)]
-    pub osize_bast: bool,
-
-    /// Input Q file
-    #[arg(value_name = "INPUT_Q")]
-    pub input_q: Option<String>,
-}
-
-impl CliArgs {
-    /// Determine the effective optimization level
-    pub fn get_optimization_level(&self) -> OptLevel {
-        if self.not_o {
-            return OptLevel::None;
-        }
-        if self.ofast {
-            return OptLevel::Fast;
-        }
-        if self.osize {
-            return OptLevel::Size;
-        }
-        if self.osize_bast {
-            return OptLevel::SizeFast;
-        }
-        // Default is None when no optimization flag is specified
-        OptLevel::None
-    }
-
-    /// Check if AOT build is requested
-    pub fn is_aot_build(&self) -> bool {
-        self.aot_build || self.input_q.is_some()
     }
 }
 
