@@ -1,39 +1,8 @@
 /// Quernc 启动器
-
-use clap::{Parser, Subcommand};
-
 #[derive(Parser, Debug)]
 #[command(name = "QuerncLauncher")]
 #[command(about = "A launcher for Quernc and Qvm scripts with AOT support")]
-
-pub struct Cli {
-    #[command(subcommand)]
-    pub command: Commands,
-}
-
-#[derive(Subcommand)]
-pub enum Commands {
-    /// Build the script to AOT (Ahead-of-Time) code
-    #[command(name = "aot-build")]
-    AotBuild {
-        /// Output directory or flag (if you want to use --not-o as a separate flag)
-        #[arg(short, long)]
-        not_o: bool,
-
-        /// The script name to build
-        script_name: String,
-
-        /// Optional input Q file
-        #[arg(required = false)]
-        input_q: Option<String>,
-    },
-    
-    // Add other subcommands if necessary, e.g., Run, Help
-    #[command(name = "help")]
-    Help,
-}
-
-pub struct QuernArgs {
+struct Args {
     /// The script file to process (e.g., basic.q)
     #[arg(index = 1)]
     pub script_name: String,
@@ -84,51 +53,13 @@ pub struct QuernArgs {
 
     /// Qlm list cloud modules
     #[arg(long)]
-    web_list: bool,
+    web_list: bool, // 类型是 bool
 
     /// Qlm list local modules
     #[arg(long)]
-    local_list: bool,
-
+    local_list: bool, // 类型是 bool
+    
     /// Qlm install all modules
     #[arg(long)]
-    module_install_all: bool,
-
-    // === AOT Build 参数 ===
-
-    /// Enable AOT build mode (--AOTBuild)
-    #[arg(long)]
-    pub aot_build: bool,
-
-    /// Disable optimizations (--NotO)
-    #[arg(long)]
-    pub not_o: bool,
-
-    /// Fast optimization (--OFast)
-    #[arg(long)]
-    pub ofast: bool,
-
-    /// Size optimization (--OSize)
-    #[arg(long)]
-    pub osize: bool,
-
-    /// Size and speed balanced optimization (--OSizeBest)
-    #[arg(long)]
-    pub osize_bast: bool,
-
-    /// Input Q file for AOT build (position 2)
-    #[arg(index = 2)]
-    pub input_q: Option<String>,
-
-    /// AOT C verbose output (--aot-c-verbose)
-    #[arg(long)]
-    pub aot_c_verbose: bool,
-
-    /// AOT force warnings (--aot-force-warn)
-    #[arg(long)]
-    pub aot_force_warn: bool,
-
-    /// AOT disable warnings (--aot-no-warn)
-    #[arg(long)]
-    pub aot_no_warn: bool,
+    module_install_all: bool, // 类型是 bool
 }

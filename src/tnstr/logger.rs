@@ -3,7 +3,7 @@ include!("logger/args.rs");
 include!("logger/arg_logics.rs");
 
 fn main() {
-    let args = QuernArgs::parse();  // <-- 修改这里
+    let args = Args::parse();
 
     // 确定操作模式和脚本名称
     let operation = if let Some(script) = &args.run {
@@ -68,15 +68,6 @@ fn main() {
         _ => Err(format!("Unknown mode: {}", mode)),
     };
 
-    match arg_logics::parse_args() {
-        Ok(_) => {
-            // Success
-        }
-        Err(e) => {
-            eprintln!("Error: {}", e);
-            std::process::exit(1);
-        }
-    }
     match result {
         Ok(_) => {
             info!("All commands executed successfully.");

@@ -1,8 +1,5 @@
 /// 执行 Quernc 编译，支持 AOT 参数
 
-use crate::args::Cli;
-use clap::Parser;
-
 /// Optimization levels for AOT build
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OptLevel {
@@ -14,35 +11,6 @@ pub enum OptLevel {
     Size,
     /// Balanced size and speed optimization
     SizeFast,
-}
-
-pub fn parse_args() -> Result<(), Box<dyn std::error::Error>> {
-    let cli = Cli::parse();
-
-    match cli.command {
-        crate::args::Commands::AotBuild { not_o, script_name, input_q } => {
-            println!("Executing AOT build...");
-            println!("Not O: {}", not_o);
-            println!("Script Name: {}", script_name);
-            
-            if let Some(q_file) = input_q {
-                println!("Input Q: {}", q_file);
-            } else {
-                println!("No additional Input Q specified.");
-            }
-
-            // Here you would call your actual AOT build logic
-            // perform_aot_build(&script_name, &q_file, not_o)?;
-        }
-        crate::args::Commands::Help => {
-            // You can print help manually if needed, or let clap handle it
-            // By default, clap handles --help automatically.
-            // If you reach here, it means someone called 'help' subcommand explicitly.
-            println!("Use --help for usage information.");
-        }
-    }
-
-    Ok(())
 }
 
 impl std::str::FromStr for OptLevel {
@@ -59,7 +27,72 @@ impl std::str::FromStr for OptLevel {
     }
 }
 
-fn execute_quernc(script: &str, trace_id: &str, args: &QuernArgs) -> Result<(), String> {
+/// Arguments for AOT build command
+#[derive(Debug, Args, Clone)]
+pub struct AotBuildArgs {
+    /// Optimization level: O, OFast, OSize, OSizeBast
+    #[arg(short, long, default_value = "O", value_name = "LEVEL")]
+    pub opt_level: OptLevel,
+
+    /// Input Q file to compile
+    #[arg(value_name = "INPUT_Q", required = true)]
+    pub input_q: String,
+}
+
+/// Main command-line arguments (已合并到 Args 中，保留供旧代码兼容)
+#[derive(Debug, Parser)]
+pub struct CliArgs {
+    /// Enable AOT build mode
+    #[arg(long)]
+    pub aot_build: bool,
+
+    /// Disable optimizations
+    #[arg(long)]
+    pub not_o: bool,
+
+    /// Fast optimization
+    #[arg(long)]
+    pub ofast: bool,
+
+    /// Size optimization
+    #[arg(long)]
+    pub osize: bool,
+
+    /// Size and speed balanced optimization
+    #[arg(long)]
+    pub osize_bast: bool,
+
+    /// Input Q file
+    #[arg(value_name = "INPUT_Q")]
+    pub input_q: Option<String>,
+}
+
+impl CliArgs {
+    /// Determine the effective optimization level
+    pub fn get_optimization_level(&self) -> OptLevel {
+        if self.not_o {
+            return OptLevel::None;
+        }
+        if self.ofast {
+            return OptLevel::Fast;
+        }
+        if self.osize {
+            return OptLevel::Size;
+        }
+        if self.osize_bast {
+            return OptLevel::SizeFast;
+        }
+        // Default is None when no optimization flag is specified
+        OptLevel::None
+    }
+
+    /// Check if AOT build is requested
+    pub fn is_aot_build(&self) -> bool {
+        self.aot_build || self.input_q.is_some()
+    }
+}
+
+fn execute_quernc(script: &str, trace_id: &str, args: &Args) -> Result<(), String> {
     info!(trace_id = trace_id, "Executing Quernc with AOT options");
 
     let mut cmd = Command::new("Quernc");
@@ -130,18 +163,18 @@ fn execute_qvm(script: &str, extra_args: &[&str], trace_id: &str) -> Result<(), 
     Ok(())
 }
 
-fn execute_run(script: &str, trace_id: &str, args: &QuernArgs) -> Result<(), String> {
+fn execute_run(script: &str, trace_id: &str, args: &Args) -> Result<(), String> {
     execute_quernc(script, trace_id, args)?;
     Ok(())
 }
 
-fn execute_vm_verbose(script: &str, trace_id: &str, args: &QuernArgs) -> Result<(), String> {
+fn execute_vm_verbose(script: &str, trace_id: &str, args: &Args) -> Result<(), String> {
     execute_quernc(script, trace_id, args)?;
     execute_qvm(script, &["--verbose"], trace_id)?;
     Ok(())
 }
 
-fn execute_vm_check(script: &str, trace_id: &str, args: &QuernArgs) -> Result<(), String> {
+fn execute_vm_check(script: &str, trace_id: &str, args: &Args) -> Result<(), String> {
     execute_quernc(script, trace_id, args)?;
     execute_qvm(script, &["--check"], trace_id)?;
     Ok(())
@@ -316,7 +349,7 @@ fn execute_module_install_all(_script_name: &str, trace_id: &str) -> Result<(), 
 
 /// Execute AOT Build - Two-step process: Quernc -> QuernBuild
 /// 命令行用法: program --AOTBuild --NotO/OFast/OSize/OSizeBest <input.q>
-fn execute_aot_build(script: &str, trace_id: &str, args: &QuernArgs) -> Result<(), String> {
+fn execute_aot_build(script: &str, trace_id: &str, args: &Args) -> Result<(), String> {
     info!(trace_id = trace_id, "Starting AOT build for script: {}", script);
 
     // Extract filename without extension
