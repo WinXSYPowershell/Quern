@@ -30,6 +30,9 @@ fn main() {
         Some(("ModuleInstall", "".to_string()))
     } else if args.local_list { // 直接判断布尔值
         Some(("LocalList", "".to_string()))
+    } else if args.aot_build {
+        Some(("AOTBuild", args.script_name.clone()))
+    }
     } else {
         None
     };

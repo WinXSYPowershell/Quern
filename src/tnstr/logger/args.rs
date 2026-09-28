@@ -62,4 +62,36 @@ struct Args {
     /// Qlm install all modules
     #[arg(long)]
     module_install_all: bool, // 类型是 bool
+        /// Enable AOT build mode (Quernc -> QuernBuild two-step)
+    
+    #[arg(long)]
+    pub aot_build: bool,
+
+    /// Disable optimizations (NoOpt)
+    #[arg(long)]
+    pub not_o: bool,
+
+    /// Fast optimization (-O3)
+    #[arg(long)]
+    pub ofast: bool,
+
+    /// Size optimization (-Os)
+    #[arg(long)]
+    pub osize: bool,
+
+    /// Size and speed balanced optimization (-Oz)
+    #[arg(long)]
+    pub osize_bast: bool,
+
+    /// Verbose C compilation output
+    #[arg(long)]
+    pub aot_c_verbose: bool,
+
+    /// Force warnings
+    #[arg(long)]
+    pub aot_force_warn: bool,
+
+    /// Disable warnings
+    #[arg(long)]
+    pub aot_no_warn: bool,
 }
