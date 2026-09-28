@@ -70,6 +70,7 @@ if ($Targets.rust_windows) {
         # --- Build 2: Quern ---
         Write-Host "[INFO] Switching to Quern Launcher build target..." -ForegroundColor Gray
         Copy-Item "$($Paths.root)\buildtargets\2\main.rs" "$($Paths.root)\src\main.rs" -Force
+        if ($LASTEXITCODE -eq 0) { "Copy completed successfully" } else { "Failed exit code: $LASTEXITCODE" }
         # 再次删除，确保重新编译
         Remove-Item "$TargetDir\Quern_cargo.exe" -ErrorAction SilentlyContinue
         Remove-Item "$TargetDir\*.d" -ErrorAction SilentlyContinue
