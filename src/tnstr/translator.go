@@ -1312,6 +1312,7 @@ type Translator struct {
 	Dicts map[string]map[string]string
 
 	// JS VM for expression evaluation
+	expandLoop bool
 	jsVm *goja.Runtime
 }
 
@@ -1325,6 +1326,7 @@ func NewTranslatorWithMods(loader *ModLoader) *Translator {
 		Entrusts:     make([]*EntrustBlock, 0),
 		Lists:        make(map[string][]string),
 		Dicts:        make(map[string]map[string]string),
+		expandLoop:   false,
 		jsVm:         goja.New(), // Initialize JS VM for math eval
 	}
 }
@@ -1718,20 +1720,21 @@ func (t *Translator) isLiteral(s string) bool {
 }
 
 func (t *Translator) translateLoop(loop *LoopBlock, localAliases map[string]string) {
-	fmt.Printf("[Warn] QVM lacks math operations. Loop(%s) cannot be dynamically implemented.\n", loop.Count)
-
-	var count int
-	_, err := fmt.Sscanf(loop.Count, "%d", &count)
-
-	if err == nil && count > 0 && count <= 10 {
-		fmt.Printf("[Info] Static unrolling Loop(%d)\n", count)
-		for i := 0; i < count; i++ {
+	// If --ExpandLoop is set, use the old static unroll method
+	if t.expandLoop {
+		var count int
+		_, err := fmt.Sscanf(loop.Count, "%d", &count)
+		if err == nil && count > 0 && count <= 10 {
+			fmt.Printf("[Info] Static unrolling Loop(%d)\n", count)
+			for i := 0; i < count; i++ {
+				t.translateBody(loop.Body, localAliases)
+			}
+		} else {
+			t.emit(fmt.Sprintf("# Loop(%s) skipped or simulated once", loop.Count))
 			t.translateBody(loop.Body, localAliases)
 		}
-	} else {
-		t.emit(fmt.Sprintf("# Loop(%s) skipped or simulated once", loop.Count))
-		t.translateBody(loop.Body, localAliases)
 	}
+	return
 }
 
 // invertOp returns the logical opposite of a comparison operator
@@ -2074,12 +2077,12 @@ func NodeToString(n Node, indentLevel int) string {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("Usage: quern-translator --Run <file.q> [--UnuseDeadCodeEli] [--LgnWarning] [--ForceRep]")
+		fmt.Println("Usage: quern-translator --Run <file.q> [--UnuseDeadCodeEli] [--LgnWarning] [--ForceRep] [--ExpandLoop]")
 		os.Exit(1)
 	}
 
 	if os.Args[1] != "--Run" || len(os.Args) < 3 {
-		fmt.Println("Usage: quern-translator --Run <file.q> [--UnuseDeadCodeEli] [--LgnWarning] [--ForceRep]")
+		fmt.Println("Usage: quern-translator --Run <file.q> [--UnuseDeadCodeEli] [--LgnWarning] [--ForceRep] [--ExpandLoop]")
 		os.Exit(1)
 	}
 
@@ -2091,6 +2094,7 @@ func main() {
 	enableDCE := false
 	ignoreWarnings := false // --LgnWarning
 	forceStrict := false    // --ForceRep (Strict mode: refuse to compile if warnings exist)
+	extandLoop := false     // --ExpandLoop (use old static unroll method for loops)
 
 	for _, arg := range os.Args[3:] {
 		switch arg {
@@ -2100,6 +2104,8 @@ func main() {
 			ignoreWarnings = true
 		case "--ForceRep":
 			forceStrict = true
+		case "--ExpandLoop":
+			extandLoop = true
 		}
 	}
 
@@ -2240,6 +2246,7 @@ func main() {
 	if hasChanges {
 		fmt.Println("[Info] Changes detected or bytecode missing. Translating...")
 		translator := NewTranslatorWithMods(loader)
+		translator.expandLoop = extandLoop
 		qbCode = translator.Translate(prog)
 
 		// Save Bytecode
