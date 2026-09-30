@@ -12,14 +12,14 @@
     "rust": "F:/.cargo/bin/cargo.exe"
   },
   "targets": {
-    "rust_windows": true,
-    "rust_linux": true,
+    "rust_windows": false,
+    "rust_linux": false,
     "cpp_windows": false,
     "cpp_linux": false,
-    "go_windows": false,
-    "go_linux": false,
-    "go_macos_arm64": false,
-    "go_macos_amd64": false,
+    "go_windows": true,
+    "go_linux": true,
+    "go_macos_arm64": true,
+    "go_macos_amd64": true,
     "pack_zip": true,
     "pack_installer": true
   }
