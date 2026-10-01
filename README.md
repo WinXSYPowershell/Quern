@@ -5,13 +5,13 @@
 ![AOT](https://img.shields.io/badge/AOT-C%2B%2B-blue.svg)
 ![Module](https://img.shields.io/badge/Module-JavaScript-teal.svg)
 ![License](https://img.shields.io/badge/License-Apache2.0-green.svg)
-#### Quern：专为商业软件打造的极速脚本引擎。源码 → 字节码 → 栈式虚拟机 / AOT 原生编译，毫秒级冷启动，极致轻量。让你的插件系统告别卡顿。
+#### Quern：专为速度与编译打造的脚本引擎。源码 → 字节码 → 栈式虚拟机 / AOT 原生编译，毫秒级冷启动，极致轻量。让你的插件系统告别卡顿。
 
 ![Logo](./logo/quern-lang.png)
 
 ## Quern 是什么?
 
-Quern 是一门面向插件场景的脚本语言，配备完整的编译工具链。近期 Quern 完成了底层彻底重构：从“直接解释源码”的单体运行时，进化为 **「Go 编译器 → 字节码 → Rust 虚拟机 / C++ AOT」** 的三段式架构。现在，Quern 拥有一套清晰的分层工具链 —— 每一层用最适合的语言实现，各司其职。
+Quern 是一门面向框架与立刻编译实现的脚本语言，配备完整的编译工具链。近期 Quern 完成了底层彻底重构：从“直接解释源码”的单体运行时，进化为 **「Go 编译器 → 字节码 → Rust 虚拟机 / C++ AOT」** 的三段式架构。现在，Quern 拥有一套清晰的分层工具链 —— 每一层用最适合的语言实现，各司其职。
 
 ## 为什么选择 Quern?
 
