@@ -124,11 +124,12 @@ if ($Targets.cpp_linux) {
 }
 
 # --- Go 翻译机部分 ---
+Set-Location "$($Paths.root)\src\tnstr"
 $GoBin = $Tools.go
 if ($Targets.go_windows) {
     Invoke-BuildStep "Go (Windows)" {
         $env:CGO_ENABLED="0"; $env:GOOS="windows"; $env:GOARCH="amd64"
-        & $GoBin build -trimpath -ldflags="-s -w -buildmode=exe" -o Quernc.exe translator.go
+        & $GoBin build -trimpath -ldflags="-s -w -buildmode=exe" -o Quernc.exe .
         Safe-Move "Quernc.exe" "$($Paths.template)\Windows\Quernc.exe"
     }
 }
@@ -136,7 +137,7 @@ if ($Targets.go_windows) {
 if ($Targets.go_linux) {
     Invoke-BuildStep "Go (Linux)" {
         $env:CGO_ENABLED="0"; $env:GOOS="linux"; $env:GOARCH="amd64"
-        & $GoBin build -trimpath -ldflags="-s -w" -o Quernc-linux translator.go
+        & $GoBin build -trimpath -ldflags="-s -w" -o Quernc-linux tnstr/translator.go
         Safe-Move "Quernc-linux" "$($Paths.template)\Linux\Quernc"
     }
 }
@@ -144,7 +145,7 @@ if ($Targets.go_linux) {
 if ($Targets.go_macos_arm64) {
     Invoke-BuildStep "Go (macOS ARM64)" {
         $env:CGO_ENABLED="0"; $env:GOOS="darwin"; $env:GOARCH="arm64"
-        & $GoBin build -trimpath -ldflags="-s -w" -o Quernc-macOS-arm64 translator.go
+        & $GoBin build -trimpath -ldflags="-s -w" -o Quernc-macOS-arm64 tnstr/translator.go
         Safe-Move "Quernc-macOS-arm64" "$($Paths.template)\macOS\arm64\Quernc"
     }
 }
@@ -152,13 +153,14 @@ if ($Targets.go_macos_arm64) {
 # if ($Targets.go_macos_amd64) {
 #     Invoke-BuildStep "Go (macOS AMD64)" {
 #         $env:CGO_ENABLED="0"; $env:GOOS="darwin"; $env:GOARCH="amd64"
-#         & $GoBin build -trimpath -ldflags="-s -w" -o Quernc-macOS-amd64 translator.go
+#         & $GoBin build -trimpath -ldflags="-s -w" -o Quernc-macOS-amd64 tnstr/translator.go
 #         Safe-Move "Quernc-macOS-amd64" "$($Paths.template)\macOS\amd64\Quernc"
 #     }
 # }
 
 
 # --- 修复后的 QVM 重命名逻辑 ---
+Set-Location $Paths.root
 $TemplatePath = $Paths.template # 先提取变量，方便阅读
 
 # 1. 安全地删除旧的 Qvm.exe (如果存在)
