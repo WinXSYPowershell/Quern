@@ -5,7 +5,7 @@
 ![AOT](https://img.shields.io/badge/AOT-C%2B%2B-blue.svg)
 ![Module](https://img.shields.io/badge/Module-JavaScript-teal.svg)
 ![License](https://img.shields.io/badge/License-Apache2.0-green.svg)
-#### Quern：专为速度与编译打造的脚本引擎。源码 → 字节码 → 栈式虚拟机 / AOT 原生编译，毫秒级冷启动，极致轻量。让你的插件系统告别卡顿。
+#### Quern：专为速度与编译打造的脚本引擎。源码 → 字节码 → 栈式虚拟机 / AOT 原生编译，毫秒级冷启动，极致轻量。让你的脚本告别龟速。
 
 ![Logo](./logo/quern-lang.png)
 
