@@ -86,10 +86,10 @@ type IfBlock struct {
 	LogicOp       string // "", "and", "or"
 	IsNot         bool   // true if 'not' keyword is present
 	Body          []Node
-	ElseBody      []Node    // Code block for Else
-	ElseIf        *IfBlock  // Linked list for Else If
-	ElseLoopCount string    // If not empty, the Else body acts as a loop body. "-1" means infinite.
-	LoopCount     string    // If not empty, the If/Else body acts as a loop body
+	ElseBody      []Node   // Code block for Else
+	ElseIf        *IfBlock // Linked list for Else If
+	ElseLoopCount string   // If not empty, the Else body acts as a loop body. "-1" means infinite.
+	LoopCount     string   // If not empty, the If/Else body acts as a loop body
 }
 
 func (i *IfBlock) Type() string { return "IfBlock" }
@@ -117,8 +117,8 @@ type ListDef struct {
 func (l *ListDef) Type() string { return "ListDef" }
 
 type DictDef struct {
-	Name   string
-	Pairs  map[string]string
+	Name  string
+	Pairs map[string]string
 }
 
 func (d *DictDef) Type() string { return "DictDef" }
@@ -465,7 +465,7 @@ func (p *Parser) parseStatement(line string) (Node, error) {
 
 	// Handle Else/ElseIf at statement level (usually inside parseIf logic, but just in case)
 	if strings.HasPrefix(line, "Else") {
-		// This should ideally be handled within parseIf's block parsing, 
+		// This should ideally be handled within parseIf's block parsing,
 		// but if it appears here, it might be an orphan or part of a complex structure.
 		// For now, we let parseIf handle the flow control.
 		return nil, fmt.Errorf("Orphaned Else statement")
@@ -1108,7 +1108,7 @@ func (dce *DeadCodeEliminator) Analyze(prog *Program) {
 		}
 	}
 
-	// If no main found, we might still want to keep global definitions if any, 
+	// If no main found, we might still want to keep global definitions if any,
 	// but typically Quern scripts need a Main or Entrusts.
 	// If there are no roots, nothing is used.
 }
@@ -1122,23 +1122,23 @@ func (dce *DeadCodeEliminator) scanBody(nodes []Node) {
 			// We don't mark it as used unless called, but we scan its body if it WAS called elsewhere.
 			// However, since we are scanning FROM a used function, we just scan the body.
 			dce.scanBody(n.Body)
-		
+
 		case *ClassDef:
 			dce.scanBody(n.Members)
 
 		case *TemplateUse:
 			dce.usedClasses[n.ClassName] = true
-			// Note: We don't recursively scan the class members here immediately to avoid 
-			// infinite loops if classes reference each other, but since we are doing a simple 
+			// Note: We don't recursively scan the class members here immediately to avoid
+			// infinite loops if classes reference each other, but since we are doing a simple
 			// reachability from Main, we should probably scan the class content if it's used.
 			// For simplicity in this pass, we mark it used. A second pass could scan class bodies.
-			
+
 		case *VarDef:
 			dce.usedVars[n.Name] = true
 
 		case *ListDef:
 			dce.usedLists[n.Name] = true
-			
+
 		case *DictDef:
 			dce.usedDicts[n.Name] = true
 
@@ -1193,9 +1193,9 @@ func (dce *DeadCodeEliminator) scanBody(nodes []Node) {
 			dce.usedVars[n.VarName] = true
 
 		case *CustomNode:
-			// Custom nodes might call functions or use variables, 
+			// Custom nodes might call functions or use variables,
 			// but without parsing their internal syntax, we can't know.
-			// Conservative approach: assume they might use something, 
+			// Conservative approach: assume they might use something,
 			// or rely on the fact that if the CustomNode is reachable, it's kept.
 		}
 	}
@@ -1238,7 +1238,7 @@ func (dce *DeadCodeEliminator) Filter(prog *Program) *Program {
 			}
 		}
 		// In a real compiler, we'd iterate until stable. Here we do one deep scan.
-		break 
+		break
 	}
 
 	for _, node := range prog.Nodes {
@@ -1294,7 +1294,6 @@ func (dce *DeadCodeEliminator) Filter(prog *Program) *Program {
 	return newProg
 }
 
-
 // --- Translator ---
 
 type Translator struct {
@@ -1313,7 +1312,8 @@ type Translator struct {
 
 	// JS VM for expression evaluation
 	expandLoop bool
-	jsVm *goja.Runtime
+	constCalc  bool
+	jsVm       *goja.Runtime
 }
 
 func NewTranslatorWithMods(loader *ModLoader) *Translator {
@@ -1327,6 +1327,7 @@ func NewTranslatorWithMods(loader *ModLoader) *Translator {
 		Lists:        make(map[string][]string),
 		Dicts:        make(map[string]map[string]string),
 		expandLoop:   false,
+		constCalc:    false,
 		jsVm:         goja.New(), // Initialize JS VM for math eval
 	}
 }
@@ -1468,15 +1469,15 @@ func (t *Translator) translateBody(nodes []Node, localAliases map[string]string)
 		case *VarDef:
 			t.emit(fmt.Sprintf("crt %s", n.Name))
 			val := n.Value
-
 			// Apply aliases first
 			if v, ok := allAliases[val]; ok {
 				val = v
 			}
-
-			// NEW: Evaluate numeric expressions if type is Int or Num, or if it looks like math
-			// We attempt evaluation for Int/Num types specifically, or if it's not a known alias/string literal
-			if n.VarType == "Int" || n.VarType == "Num" {
+			// ConstCalc: if enabled, always try to evaluate expressions at translation time
+			if t.constCalc {
+				val = t.evaluateExpression(val)
+			} else if n.VarType == "Int" || n.VarType == "Num" {
+				// Evaluate numeric expressions if type is Int or Num
 				val = t.evaluateExpression(val)
 			} else if n.VarType == "Any" {
 				// For Any, we try to see if it's a math expression that should be pre-calculated
@@ -1485,7 +1486,6 @@ func (t *Translator) translateBody(nodes []Node, localAliases map[string]string)
 					val = t.evaluateExpression(val)
 				}
 			}
-
 			t.emit(fmt.Sprintf("psh %s %s", n.Name, val))
 
 		case *ListDef:
@@ -1498,6 +1498,10 @@ func (t *Translator) translateBody(nodes []Node, localAliases map[string]string)
 			content := n.Content
 			if v, ok := allAliases[content]; ok {
 				content = v
+			}
+			// ConstCalc: pre-evaluate expressions in Console.Info content
+			if t.constCalc {
+				content = t.evaluateExpression(content)
 			}
 			t.emit(fmt.Sprintf("out %s", content))
 			t.emit("otn")
@@ -2077,25 +2081,25 @@ func NodeToString(n Node, indentLevel int) string {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("Usage: quern-translator --Run <file.q> [--UnuseDeadCodeEli] [--LgnWarning] [--ForceRep] [--ExpandLoop]")
+		fmt.Println("Usage: quern-translator --Run <file.q> [--UnuseDeadCodeEli] [--LgnWarning] [--ForceRep] [--ExpandLoop] [--ConstCalc]")
 		os.Exit(1)
 	}
 
 	if os.Args[1] != "--Run" || len(os.Args) < 3 {
-		fmt.Println("Usage: quern-translator --Run <file.q> [--UnuseDeadCodeEli] [--LgnWarning] [--ForceRep] [--ExpandLoop]")
+		fmt.Println("Usage: quern-translator --Run <file.q> [--UnuseDeadCodeEli] [--LgnWarning] [--ForceRep] [--ExpandLoop] [--ConstCalc]")
 		os.Exit(1)
 	}
 
 	sourceFile := os.Args[2]
 	modDir := "mods"
 	cacheBaseDir := "cache"
-	
+
 	// Flags
 	enableDCE := false
 	ignoreWarnings := false // --LgnWarning
 	forceStrict := false    // --ForceRep (Strict mode: refuse to compile if warnings exist)
 	extandLoop := false     // --ExpandLoop (use old static unroll method for loops)
-
+	constCalc := false      // --ConstCalc (pre-evaluate expressions at translation time)
 	for _, arg := range os.Args[3:] {
 		switch arg {
 		case "--UnuseDeadCodeEli":
@@ -2106,6 +2110,8 @@ func main() {
 			forceStrict = true
 		case "--ExpandLoop":
 			extandLoop = true
+		case "--ConstCalc":
+			constCalc = true
 		}
 	}
 
@@ -2139,20 +2145,20 @@ func main() {
 
 	// 5. Dead Code Elimination & Warning Check
 	var dce *DeadCodeEliminator
-	
-	// We always analyze for warnings if strict mode or warning output is needed, 
+
+	// We always analyze for warnings if strict mode or warning output is needed,
 	// but we only filter (modify AST) if enableDCE is true.
 	dce = NewDeadCodeEliminator()
 	dce.Analyze(prog)
 
 	// Check for issues before proceeding
 	hasWarnings := false
-	
+
 	// Temporarily capture warnings to decide whether to block execution
 	// We need to know if there ARE unused items, regardless of whether we print them.
 	// The Filter method currently prints. Let's create a check method or modify logic.
 	// For simplicity, we will run a check pass.
-	
+
 	unusedItems := checkForUnusedItems(dce, prog)
 	if len(unusedItems) > 0 {
 		hasWarnings = true
@@ -2166,7 +2172,7 @@ func main() {
 			}
 			os.Exit(1)
 		}
-		
+
 		if !ignoreWarnings {
 			fmt.Println("[Warning] Unused code detected:")
 			for _, item := range unusedItems {
@@ -2247,6 +2253,7 @@ func main() {
 		fmt.Println("[Info] Changes detected or bytecode missing. Translating...")
 		translator := NewTranslatorWithMods(loader)
 		translator.expandLoop = extandLoop
+		translator.constCalc = constCalc
 		qbCode = translator.Translate(prog)
 
 		// Save Bytecode
@@ -2298,7 +2305,7 @@ func checkForUnusedItems(dce *DeadCodeEliminator, prog *Program) []string {
 			if !dce.usedDicts[n.Name] {
 				warnMsg = fmt.Sprintf("Unused Dict: \"%s\"", n.Name)
 			}
-		} 
+		}
 
 		if warnMsg != "" {
 			warnings = append(warnings, warnMsg)
@@ -2306,4 +2313,3 @@ func checkForUnusedItems(dce *DeadCodeEliminator, prog *Program) []string {
 	}
 	return warnings
 }
-
