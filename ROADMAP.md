@@ -8,47 +8,7 @@
 
 ### 基础功能
 
-- [ ] 添加AOT翻译一条龙（translator.go -> bytecode -> aot.cpp -> c -> exe）怎么添加：
-
-- [ ] 2.给psh添加"+"/"-"/"*"/"/"功能
-示例：
-```quernvm
-crt cunters
-psh cunters "1"
-pop cunters
-psh @cunters@ + "5"
-psh @cunters@ - "1"
-psh @cunters@ * "2"
-psh @cunters@ / "2"
-pop cunters
-out @cunters@
-```
-#### 输出
-```bash
-5
-```
-
-- [ ] 3.jmp可以使用变量的功能
-示例：
-```quernvm
-crt cunters
-psh cunters "1"
-cal loop1
-fnc "loop1"{
-jmp @cunters@ 100 >= cal "exit"
-out "Hello Number:@cunters@"
-psh @cunters@ + 1
-cal "loop1"
-}
-
-fnc "exit"{
-}
-```
-
-- [ ] 4.添加给QuernBuild支持Qvm新功能
-- [ ] 5.translator也是
-
-- [ ] 6.给Quern加入字符logo：
+- [ ] 1.给Quern加入字符logo：
 ```bash
 QQQQQQQQQ                                                                                  
    QQ:::::::::QQ                                                                                
@@ -70,7 +30,7 @@ Q:::::::QQ::::::::Q u:::::::::::::::uue::::::::e           r:::::r              
               QQQQQQ
 ```
 
-- [ ] 7.添加VmCode的逃生舱
+- [ ] 2.添加VmCode的逃生舱
 示例：
 ```quern
 #VMCODE _BEGIN
