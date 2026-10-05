@@ -3,7 +3,34 @@ include!("logger/args.rs");
 include!("logger/arg_logics.rs");
 
 fn main() {
-    let args = Args::parse();
+    // 收集命令行参数
+    let raw_args: Vec<OsString> = std::env::args_os().collect();
+    
+    // 创建带 logo 的命令 —— before_help 会在每次打印帮助前自动输出 logo
+    let app = Args::command().before_help(LOGO.to_string());
+    
+    // 尝试解析参数
+    let args = Args::try_parse_from(raw_args.clone()).unwrap_or_else(|e| {
+        match e.kind() {
+            // 用户请求了帮助（--help），用带 logo 的命令打印
+            clap::error::ErrorKind::DisplayHelp |
+            clap::error::ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand => {
+                let _ = app.clone().print_help();
+                println!();
+            }
+            // 其他错误正常打印
+            _ => {
+                let _ = e.print();
+            }
+        }
+        std::process::exit(1);
+    });
+
+    // 处理 --logo 参数：直接打印 logo 并退出
+    if args.logo {
+        print!("{}", LOGO);
+        return;
+    }
 
     // 确定操作模式和脚本名称
     let operation = if let Some(script) = &args.run {

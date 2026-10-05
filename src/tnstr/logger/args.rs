@@ -1,8 +1,30 @@
 /// Quernc 启动器
+const LOGO: &str = r#"QQQQQQQQQ
+   QQ:::::::::QQ
+  QQ:::::::::::::QQ
+ Q:::::::QQQ:::::::Q
+ Q::::::O   Q::::::Q uuuuuu    uuuuuu      eeeeeeeeeeee    rrrrr   rrrrrrrrr   nnnn  nnnnnnnn
+ Q:::::O     Q:::::Q u::::u    u::::u    ee::::::::::::ee  rrrrrrrr:::::::::r  n:::nn::::::::nn
+ Q:::::O     Q:::::Q u::::u    u::::u   e::::::eeeee:::::er:::::::::::::::::r n::::::::::::::nn
+ Q:::::O     Q:::::Q u::::u    u::::u  e::::::e     e:::::err::::::rrrrr::::::rnn:::::::::::::::n
+ Q:::::O     Q:::::Q u::::u    u::::u  e:::::::eeeee::::::e r:::::r     r:::::r  n:::::nnnn:::::n
+ Q:::::O     Q:::::Q u::::u    u::::u  e:::::::::::::::::e  r:::::r     rrrrrrr  n::::n    n::::n
+ Q:::::O  QQQQ:::::Q u::::u    u::::u  e::::::eeeeeeeeeee   r:::::r              n::::n    n::::n
+ Q::::::O Q::::::::Q u:::::uuuu:::::u  e:::::::e            r:::::r              n::::n    n::::n
+ Q:::::::QQ::::::::Q u:::::::::::::::u e::::::::e           r:::::r              n::::n    n::::n
+  QQ::::::::::::::Q   u:::::::::::::::u e::::::::eeeeeeee   r:::::r              n::::n    n::::n
+   QQ:::::::::::Q     uu::::::::uu:::u  ee:::::::::::::e   r:::::r              n::::n    n::::n
+     QQQQQQQQ::::QQ     uuuuuuuu  uuuu    eeeeeeeeeeeeee   rrrrrrr              nnnnnn    nnnnnn
+             Q:::::Q
+              QQQQQQ"#;
 #[derive(Parser, Debug)]
 #[command(name = "QuerncLauncher")]
 #[command(about = "A launcher for Quernc and Qvm scripts with AOT support")]
 struct Args {
+
+    #[arg(long)]
+    pub logo: bool,
+
     /// The script file to process (e.g., basic.q)
     #[arg(index = 1)]
     pub script_name: String,
