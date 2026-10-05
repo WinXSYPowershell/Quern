@@ -23,9 +23,6 @@ const LOGO: &str = r#"QQQQQQQQQ
 #[command(about = "A launcher for Quernc and Qvm scripts with AOT support")]
 struct Args {
 
-    #[arg(long)]
-    pub logo: bool,
-
     /// The script file to process (e.g., basic.q)
     #[arg(index = 1)]
     pub script_name: String,
@@ -117,4 +114,7 @@ struct Args {
     /// Disable warnings
     #[arg(long)]
     pub aot_no_warn: bool,
+
+    #[arg(long)]
+    pub logo: bool,
 }
