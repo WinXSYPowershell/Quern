@@ -16,7 +16,8 @@ const LOGO: &str = r#"QQQQQQQQQ
    QQ:::::::::::Q     uu::::::::uu:::u  ee:::::::::::::e   r:::::r              n::::n    n::::n
      QQQQQQQQ::::QQ     uuuuuuuu  uuuu    eeeeeeeeeeeeee   rrrrrrr              nnnnnn    nnnnnn
              Q:::::Q
-              QQQQQQ"#;
+              QQQQQQ
+"#;
 #[derive(Parser, Debug)]
 #[command(name = "QuerncLauncher")]
 #[command(about = "A launcher for Quernc and Qvm scripts with AOT support")]
