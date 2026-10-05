@@ -25,7 +25,7 @@ struct Args {
 
     /// The script file to process (e.g., basic.q)
     #[arg(index = 1)]
-    pub script_name: String,
+    pub script_name: Option<String>,
 
     /// RunScripts: Quernc --run <ScriptName.q>
     #[arg(long)]

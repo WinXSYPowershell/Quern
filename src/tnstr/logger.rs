@@ -58,10 +58,10 @@ fn main() {
     } else if args.local_list { // 直接判断布尔值
         Some(("LocalList", "".to_string()))
     } else if args.aot_build {
-        Some(("AOTBuild", args.script_name.clone())) 
+        Some(("AOTBuild", args.script_name.clone().unwrap_or_default()))
     } else {
         // 如果没有指定任何操作标志，默认以 Run 模式执行 script_name
-        Some(("Run", args.script_name.clone()))
+        Some(("Run", args.script_name.clone().unwrap_or_default()))
     };
 
     if operation.is_none() {
