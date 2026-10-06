@@ -4,7 +4,6 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -172,4 +171,3 @@ func NodeToString(n Node, indentLevel int) string {
 		return fmt.Sprintf("# Unknown Node: %T", v)
 	}
 }
-

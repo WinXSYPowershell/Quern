@@ -1,13 +1,5 @@
 package main
 
-import (
-	"fmt"
-	"strconv"
-	"strings"
-
-	"github.com/dop251/goja"
-)
-
 // --- AST Definitions ---
 
 type Node interface {
@@ -193,4 +185,3 @@ type DictOpFindKey struct {
 }
 
 func (d *DictOpFindKey) Type() string { return "DictOpFindKey" }
-

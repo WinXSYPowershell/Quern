@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"strings"
 )
 
 // --- Dead Code Eliminator ---
@@ -228,4 +227,3 @@ func (dce *DeadCodeEliminator) Filter(prog *Program) *Program {
 
 	return newProg
 }
-
