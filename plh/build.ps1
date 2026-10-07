@@ -58,7 +58,7 @@ if ($Targets.rust_windows) {
         # 删除旧的输出文件，强制重新编译
         Remove-Item "$TargetDir\Quern_cargo.exe" -ErrorAction SilentlyContinue
         Remove-Item "$TargetDir\*.d" -ErrorAction SilentlyContinue # 删除增量编译元数据
-        'include!("tnstr/qvm.rs");' | Out-File -FilePath "$($Paths.root)\src\main.rs" -Encoding utf8 -NoNewline
+        'include!("qvm/main.rs");' | Out-File -FilePath "$($Paths.root)\src\main.rs" -Encoding utf8 -NoNewline
         Get-Content "$($Paths.root)\src\main.rs" | Write-Host
         Write-Host "[INFO] Removed cache files of last build" -ForegroundColor Gray
         
