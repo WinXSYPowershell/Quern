@@ -5,7 +5,7 @@ use crate::instructions::{Instruction, Program, ArithmeticOp, ComparisonOp};
 // --- Parser Implementation ---
 
 
-struct Parser {
+pub struct Parser {
     tokens: Vec<String>,
     pos: usize,
     line_map: Vec<usize>, // Maps token index to line number
@@ -13,10 +13,10 @@ struct Parser {
 }
 
 impl Parser {
-    fn is_variable(s: &str) -> bool {
+    pub fn is_variable(s: &str) -> bool {
         s.starts_with('@') && s.ends_with('@') && s.len() > 2
     }
-        fn new(input: &str) -> Self {
+        pub fn new(input: &str) -> Self {
             let mut tokens = Vec::new();
             let mut line_map = Vec::new();
             let source_lines: Vec<String> = input.lines().map(|l| l.to_string()).collect();
@@ -106,7 +106,7 @@ impl Parser {
         }
     }
 
-    fn parse(mut self) -> Result<Program, SyntaxError> {
+    pub fn parse(mut self) -> Result<Program, SyntaxError> {
         let mut instructions = Vec::new();
         let mut functions = HashMap::new();
 

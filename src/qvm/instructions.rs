@@ -2,9 +2,8 @@ use std::collections::HashMap;
 
 // --- Instruction Definitions ---
 
-
 #[derive(Debug, Clone)]
-enum ComparisonOp {
+pub enum ComparisonOp {
     Equal,      // =
     NotEqual,   // !=
     LessThan,   // <
@@ -14,7 +13,7 @@ enum ComparisonOp {
 }
 
 impl ComparisonOp {
-    fn from_str(s: &str) -> Result<Self, String> {
+    pub fn from_str(s: &str) -> Result<Self, String> {
         match s {
             "=" => Ok(ComparisonOp::Equal),
             "!=" => Ok(ComparisonOp::NotEqual),
@@ -28,7 +27,7 @@ impl ComparisonOp {
 }
 
 #[derive(Debug, Clone)]
-enum ArithmeticOp {
+pub enum ArithmeticOp {
     Add,      // +
     Subtract, // -
     Multiply, // *
@@ -36,7 +35,7 @@ enum ArithmeticOp {
 }
 
 impl ArithmeticOp {
-    fn from_str(s: &str) -> Result<Self, String> {
+    pub fn from_str(s: &str) -> Result<Self, String> {
         match s {
             "+" => Ok(ArithmeticOp::Add),
             "-" => Ok(ArithmeticOp::Subtract),
@@ -48,7 +47,7 @@ impl ArithmeticOp {
 }
 
 #[derive(Debug, Clone)]
-enum Instruction {
+pub enum Instruction {
     CreateStack(String),
     Push(String, (String, bool)), 
     Pop(String),
@@ -69,7 +68,7 @@ enum Instruction {
     },
 }
 
-struct Program {
-    instructions: Vec<Instruction>,
-    functions: HashMap<String, Vec<Instruction>>,
+pub struct Program {
+    pub instructions: Vec<Instruction>,
+    pub functions: HashMap<String, Vec<Instruction>>,
 }

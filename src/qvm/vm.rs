@@ -3,19 +3,18 @@ use crate::instructions::{Instruction, Program, ArithmeticOp, ComparisonOp};
 
 // --- VM Implementation ---
 
-
-struct VM {
+pub struct VM {
     stacks: HashMap<String, Vec<String>>,
 }
 
 impl VM {
-    fn new() -> Self {
+    pub fn new() -> Self {
         VM {
             stacks: HashMap::new(),
         }
     }
 
-    fn execute(&mut self, program: &Program) {
+    pub fn execute(&mut self, program: &Program) {
         self.execute_instructions(&program.instructions, &program.functions);
     }
 
@@ -26,7 +25,7 @@ impl VM {
                     self.stacks.entry(name.clone()).or_insert_with(Vec::new);
                 }
                 Instruction::Push(stack_name, (val, is_var)) => {
-                    let value_to_push = if *is_var {
+                    let value_to_push: String = if *is_var {
                         let fetched_val = self.get_stack_top(val);
                         match fetched_val {
                             Some(v) => v,
@@ -102,7 +101,7 @@ impl VM {
                 }
                 Instruction::ConditionalJump { left_stack, right_stack, op, target_func } => {
                     // 左侧操作数：变量模式从栈取值，直接模式用字面值
-                    let left_val = if left_stack.1 {
+                    let left_val: Option<String> = if left_stack.1 {
                         // 变量模式：从栈中获取值
                         self.get_stack_top(&left_stack.0)
                     } else {
@@ -110,7 +109,7 @@ impl VM {
                         Some(left_stack.0.clone())
                     };
 
-                    let right_val = if right_stack.1 {
+                    let right_val: Option<String> = if right_stack.1 {
                         self.get_stack_top(&right_stack.0)
                     } else {
                         Some(right_stack.0.clone())
@@ -134,7 +133,7 @@ impl VM {
                     if let Some(stack_data) = self.stacks.get_mut(stack) {
                         if let Some(top) = stack_data.pop() {
                             if let (Ok(left), Ok(right)) = (top.parse::<f64>(), value.parse::<f64>()) {
-                                let result = match operator {
+                                let result: f64 = match operator {
                                     ArithmeticOp::Add => left + right,
                                     ArithmeticOp::Subtract => left - right,
                                     ArithmeticOp::Multiply => left * right,

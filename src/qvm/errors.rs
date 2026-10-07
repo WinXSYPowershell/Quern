@@ -2,14 +2,13 @@ use std::fmt;
 
 // --- Error Handling Structures ---
 
-
 #[derive(Debug)]
-struct SyntaxError {
-    error_name: String,
-    error_code: u32,
-    line_number: usize,
-    source_line: String,
-    token_content: String, // The specific token causing the error
+pub struct SyntaxError {
+    pub error_name: String,
+    pub error_code: u32,
+    pub line_number: usize,
+    pub source_line: String,
+    pub token_content: String, // The specific token causing the error
 }
 
 impl fmt::Display for SyntaxError {
@@ -26,7 +25,7 @@ impl std::error::Error for SyntaxError {}
 
 
 impl SyntaxError {
-    fn format_normal(&self, filename: &str) -> String {
+    pub fn format_normal(&self, filename: &str) -> String {
         format!(
             "[Error!]In {} Detected {},Code {} at line {}.Source:{}<-[HERE!]{}",
             filename,
@@ -38,7 +37,7 @@ impl SyntaxError {
         )
     }
 
-    fn format_verbose(&self, filename: &str) -> String {
+    pub fn format_verbose(&self, filename: &str) -> String {
         let indent = "   ";
         let arrow_pos = self.find_token_position_in_line();
         
@@ -53,7 +52,11 @@ impl SyntaxError {
         let wavy = "~".repeat(self.source_line.len() + 4);
 
         format!(
-            "[Error!]In {} Detected {}, Code {}\nAt {}, Source:\n{}\n{}\n{}{}",
+            "[Error!]In {} Detected {}, Code {}
+At {}, Source:
+{}
+{}
+{}{}",
             filename,
             self.error_name,
             self.error_code,
