@@ -12,6 +12,7 @@ use instructions::{Program, Instruction, ArithmeticOp, ComparisonOp};
 use vm::VM;
 use parser::Parser;
 
+fn main() {
     let args: Vec<String> = env::args().collect();
     
     if args.len() < 3 {
