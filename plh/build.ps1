@@ -68,7 +68,7 @@ if ($Targets.rust_windows) {
 
         # --- Build 2: Quern ---
         Write-Host "[INFO] Switching to Quern Launcher build target..." -ForegroundColor Gray
-        'include!("tnstr/logger.rs");' | Out-File -FilePath "$($Paths.root)\src\main.rs" -Encoding utf8 -NoNewline
+        'include!("logger/main.rs");' | Out-File -FilePath "$($Paths.root)\src\main.rs" -Encoding utf8 -NoNewline
         Get-Content "$($Paths.root)\src\main.rs" | Write-Host
         # 再次删除，确保重新编译
         Remove-Item "$TargetDir\Quern_cargo.exe" -ErrorAction SilentlyContinue
@@ -111,14 +111,14 @@ if ($Targets.rust_linux) {
 # --- C++ AOT 部分 ---
 if ($Targets.cpp_windows) {
     Invoke-BuildStep "C++ AOT (Windows)" {
-        clang++ src\tnstr\aot.cpp -o QuernBuild.exe -std=c++17 -static -O3 -s -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
+        clang++ src\aot\main.cpp -o QuernBuild.exe -std=c++17 -static -O3 -s -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
         Safe-Move "$($Paths.root)\QuernBuild.exe" "$($Paths.template)\Windows\QuernBuild.exe"
     }
 }
 
 if ($Targets.cpp_linux) {
     Invoke-BuildStep "C++ AOT (Linux)" {
-        wsl g++ /mnt/i/Quern/QuernProj/Quern/src/tnstr/aot.cpp -o /mnt/i/Quern/QuernProj/Quern/QuernBuild -std=c++17 -static -O3 -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable -g1 -fno-omit-frame-pointer
+        wsl g++ /mnt/i/Quern/QuernProj/Quern/src/aot/main.cpp -o /mnt/i/Quern/QuernProj/Quern/QuernBuild -std=c++17 -static -O3 -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable -g1 -fno-omit-frame-pointer
         Safe-Move "$($Paths.root)\QuernBuild" "$($Paths.template)\Linux\QuernBuild"
     }
 }
@@ -157,6 +157,40 @@ if ($Targets.go_macos_arm64) {
 #         Safe-Move "Quernc-macOS-amd64" "$($Paths.template)\macOS\amd64\Quernc"
 #     }
 # }
+
+# Qlm 部分
+# Windows
+if ($Targets.qlm_windows) {
+    Invoke-BuildStep "QLM (Windows)" {
+        clang++ src\qlm\main.cpp -o Qlm.exe -std=c++17 -static -O3 -s -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
+        Save-Move "$($Paths.root)\Qlm.exe" "$($Paths.template)\Windows\Qlm.exe"
+    }
+}
+
+# Linux
+if ($Targets.qlm_linux) {
+    Invoke-BuildStep "QLM (Linux)" {
+        wsl g++ /mnt/i/Quern/QuernProj/Quern/src/qlm/main.cpp -o /mnt/i/Quern/QuernProj/Quern/QuernBuild -std=c++17 -static -O3 -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable -g1 -fno-omit-frame-pointer
+        Safe-Move "$($Paths.root)\Qlm" "$($Paths.template)\Linux\Qlm"
+    }
+}
+
+# Update 部分
+# Windows
+if ($Targets.update_windows) {
+    Invoke-BuildStep "Updater (Windows)" {
+        clang++ src\update\main.cpp -o Updater.exe -std=c++17 -static -O3 -s -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
+        Safe-Move "$($Paths.root)\Updater.exe" "$($Paths.template)\Windows\Updater.exe"
+    }
+}
+
+# Linux
+if ($Targets.update_linux) {
+    Invoke-BuildStep "Updater (Linux)" {
+        wsl g++ /mnt/i/Quern/QuernProj/Quern/src/update/main.cpp -o /mnt/i/Quern/QuernProj/Quern/Updater -std=c++17 -static -O3 -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable -g1 -fno-omit-frame-pointer
+        Safe-Move "$($Paths.root)\Updater" "$($Paths.template)\Linux\Updater"
+    }
+}
 
 
 # --- 修复后的 QVM 重命名逻辑 ---
