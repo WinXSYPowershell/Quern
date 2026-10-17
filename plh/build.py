@@ -200,7 +200,7 @@ def main():
         run_command([
             go_bin, "build", "-trimpath", 
             "-ldflags=-s -w", 
-            "-o", "Quernc-linux", "tnstr/translator.go"
+            "-o", "Quernc-linux", "."
         ], env=env)
         safe_move("Quernc-linux", template_path / "Linux" / "Quernc")
 
@@ -210,7 +210,7 @@ def main():
         run_command([
             go_bin, "build", "-trimpath", 
             "-ldflags=-s -w", 
-            "-o", "Quernc-macOS-arm64", "tnstr/translator.go"
+            "-o", "Quernc-macOS-arm64", "."
         ], env=env)
         safe_move("Quernc-macOS-arm64", template_path / "macOS" / "arm64" / "Quernc")
 
