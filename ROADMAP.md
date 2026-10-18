@@ -8,35 +8,7 @@
 
 ### 基础功能
 
-- [ ] 1.给Quern加入字符logo：
-```bash
-QQQQQQQQQ                                                                                  
-   QQ:::::::::QQ                                                                                
- QQ:::::::::::::QQ                                                                              
-Q:::::::QQQ:::::::Q                                                                             
-Q::::::O   Q::::::Q uuuuuu    uuuuuu      eeeeeeeeeeee    rrrrr   rrrrrrrrr   nnnn  nnnnnnnn    
-Q:::::O     Q:::::Q u::::u    u::::u    ee::::::::::::ee  r::::rrr:::::::::r  n:::nn::::::::nn  
-Q:::::O     Q:::::Q u::::u    u::::u   e::::::eeeee:::::eer:::::::::::::::::r n::::::::::::::nn 
-Q:::::O     Q:::::Q u::::u    u::::u  e::::::e     e:::::err::::::rrrrr::::::rnn:::::::::::::::n
-Q:::::O     Q:::::Q u::::u    u::::u  e:::::::eeeee::::::e r:::::r     r:::::r  n:::::nnnn:::::n
-Q:::::O     Q:::::Q u::::u    u::::u  e:::::::::::::::::e  r:::::r     rrrrrrr  n::::n    n::::n
-Q:::::O  QQQQ:::::Q u::::u    u::::u  e::::::eeeeeeeeeee   r:::::r              n::::n    n::::n
-Q::::::O Q::::::::Q u:::::uuuu:::::u  e:::::::e            r:::::r              n::::n    n::::n
-Q:::::::QQ::::::::Q u:::::::::::::::uue::::::::e           r:::::r              n::::n    n::::n
- QQ::::::::::::::Q   u:::::::::::::::u e::::::::eeeeeeee   r:::::r              n::::n    n::::n
-   QQ:::::::::::Q     uu::::::::uu:::u  ee:::::::::::::e   r:::::r              n::::n    n::::n
-     QQQQQQQQ::::QQ     uuuuuuuu  uuuu    eeeeeeeeeeeeee   rrrrrrr              nnnnnn    nnnnnn
-             Q:::::Q                                                                            
-              QQQQQQ
-```
 
-- [ ] 2.添加VmCode的逃生舱
-示例：
-```quern
-#VMCODE _BEGIN
-out "Hello"
-#VMCODE _END
-```
 
 ### 1. 热点检测与 AOT 自动触发（当前优先）
 
