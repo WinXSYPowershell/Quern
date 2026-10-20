@@ -117,6 +117,16 @@ func (t *Translator) Translate(prog *Program) string {
 		}
 	}
 
+	// Emit any top-level VmCode escape-hatch blocks (raw passthrough).
+	// They are placed after all function definitions and before the entrust
+	// loop / main call so the hand-written bytecode is injected into the
+	// global scope without disturbing generated function bodies.
+	for _, node := range prog.Nodes {
+		if vc, ok := node.(*VmCodeNode); ok {
+			t.emitVmCode(vc)
+		}
+	}
+
 	// Generate Entrust Functions and Loop
 	t.generateEntrustLogic()
 
@@ -362,6 +372,9 @@ func (t *Translator) translateBody(nodes []Node, localAliases map[string]string)
 				t.emit(fmt.Sprintf("psh %s %s", n.VarName, foundKey))
 			}
 
+		case *VmCodeNode:
+			t.emitVmCode(n)
+
 		case *CustomNode:
 			if t.ModLoader != nil {
 				if handler, ok := t.ModLoader.GetHandler(n.Keyword); ok {
@@ -383,6 +396,21 @@ func (t *Translator) translateBody(nodes []Node, localAliases map[string]string)
 			} else {
 				t.emit(fmt.Sprintf("# Mod system not initialized for: %s", n.RawLine))
 			}
+		}
+	}
+}
+
+// emitVmCode writes the raw VM instructions captured by a #VMCODE escape-hatch
+// block verbatim into the instruction stream. No alias substitution, no
+// expression evaluation and no validation are applied -- that is the point of
+// the escape hatch: the user hand-wrote the exact bytecode they want. Leading/
+// trailing whitespace is trimmed (VmCode tokens are whitespace separated) and
+// blank lines are skipped.
+func (t *Translator) emitVmCode(node *VmCodeNode) {
+	for _, ln := range node.RawLines {
+		l := strings.TrimSpace(ln)
+		if l != "" {
+			t.emit(l)
 		}
 	}
 }

@@ -185,3 +185,13 @@ type DictOpFindKey struct {
 }
 
 func (d *DictOpFindKey) Type() string { return "DictOpFindKey" }
+
+// --- VmCode Escape Hatch Node ---
+// Raw VM instructions captured by a `#VMCODE _BEGIN ... #VMCODE _END` block.
+// These lines bypass the translator entirely and are written to the bytecode
+// verbatim, so users can hand-write VmCode the translator does not know about.
+type VmCodeNode struct {
+	RawLines []string // Original VM code lines, emitted verbatim (no translation)
+}
+
+func (v *VmCodeNode) Type() string { return "VmCodeNode" }

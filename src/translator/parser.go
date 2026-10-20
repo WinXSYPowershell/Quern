@@ -28,6 +28,19 @@ func (p *Parser) Parse() (*Program, error) {
 			continue
 		}
 
+		// VmCode escape hatch: capture a raw passthrough block at top level.
+		if isVmCodeBegin(line) {
+			beginLineNo := p.pos + 1
+			vn, err := p.parseVmCode()
+			if err != nil {
+				return nil, fmt.Errorf("Line %d: %v", beginLineNo, err)
+			}
+			if vn != nil {
+				prog.Nodes = append(prog.Nodes, vn)
+			}
+			continue
+		}
+
 		oldPos := p.pos
 		node, err := p.parseLine(line)
 		if err != nil {
@@ -199,6 +212,15 @@ func (p *Parser) parseBlock() ([]Node, error) {
 }
 
 func (p *Parser) parseStatement(line string) (Node, error) {
+	// VmCode escape hatch: raw passthrough block (works inside any { } body).
+	if isVmCodeBegin(line) {
+		vn, err := p.parseVmCode()
+		if err != nil {
+			return nil, err
+		}
+		return vn, nil
+	}
+
 	if strings.HasPrefix(line, "Data.Var") {
 		return p.parseVarDef(line)
 	}
@@ -709,3 +731,58 @@ func findLogicKeyword(s string, keyword string) int {
 	return -1
 }
 
+
+// --- VmCode Escape Hatch (#VMCODE _BEGIN ... #VMCODE _END) ---
+
+// vmCodeKeyword is the reserved marker prefix. The character '#' is used only
+// for output-side diagnostics elsewhere, so it is free as an input-side marker.
+const vmCodeKeyword = "#VMCODE"
+
+// isVmCodeBegin reports whether a (already trimmed) line is the `#VMCODE _BEGIN`
+// opening marker. The keyword match is case-insensitive.
+func isVmCodeBegin(line string) bool {
+	if len(line) < len(vmCodeKeyword) || !strings.EqualFold(line[:len(vmCodeKeyword)], vmCodeKeyword) {
+		return false
+	}
+	return strings.ToUpper(strings.TrimSpace(line[len(vmCodeKeyword):])) == "_BEGIN"
+}
+
+// isVmCodeEnd reports whether a (already trimmed) line is the `#VMCODE _END`
+// closing marker.
+func isVmCodeEnd(line string) bool {
+	if len(line) < len(vmCodeKeyword) || !strings.EqualFold(line[:len(vmCodeKeyword)], vmCodeKeyword) {
+		return false
+	}
+	return strings.ToUpper(strings.TrimSpace(line[len(vmCodeKeyword):])) == "_END"
+}
+
+// parseVmCode consumes a `#VMCODE _BEGIN ... #VMCODE _END` block. It assumes
+// p.pos currently points at the BEGIN marker and advances p.pos past the END
+// marker. Everything between the two markers is captured verbatim (original
+// line text) so the translator can pass it straight through to the bytecode.
+func (p *Parser) parseVmCode() (*VmCodeNode, error) {
+	if !isVmCodeBegin(strings.TrimSpace(p.lines[p.pos])) {
+		return nil, fmt.Errorf("Expected '#VMCODE _BEGIN'")
+	}
+
+	p.pos++ // consume the BEGIN marker
+
+	var raw []string
+	closed := false
+	for p.pos < len(p.lines) {
+		cur := strings.TrimSpace(p.lines[p.pos])
+		if isVmCodeEnd(cur) {
+			p.pos++ // consume the END marker
+			closed = true
+			break
+		}
+		raw = append(raw, p.lines[p.pos]) // keep original text verbatim
+		p.pos++
+	}
+
+	if !closed {
+		return nil, fmt.Errorf("Unterminated VmCode block: missing '#VMCODE _END'")
+	}
+
+	return &VmCodeNode{RawLines: raw}, nil
+}
