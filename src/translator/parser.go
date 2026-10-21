@@ -15,8 +15,116 @@ type Parser struct {
 
 func NewParser(source string) *Parser {
 	source = strings.ReplaceAll(source, "\r\n", "\n")
+	// Strip the quern comment syntax before splitting into lines so that block
+	// comments (// ... //) work whether they sit on their own line, span several
+	// lines, or appear inline inside a statement such as
+	//     Console.Info(// 注释... //"Hello World!")
+	source = stripQuernComments(source)
 	lines := strings.Split(source, "\n")
 	return &Parser{lines: lines, pos: 0}
+}
+
+// --- Comment Handling ---
+//
+// quern supports complete block comments delimited by a pair of "//" markers:
+//
+	// A block comment on one line:
+	//     // 注释... //
+	//
+	// A block comment split over several lines:
+	//     //
+	//     注释...
+	//     //
+	//
+	// And a block comment embedded in the middle of a statement:
+	//     Console.Info(// 注释... //"Hello World!")
+	//
+// The text between an opening "//" and the next "//" is removed. A lone "//"
+// that is never closed by another "//" before end-of-file keeps the classic
+// behaviour of a line comment running to the end of its line. "//" inside
+// double-quoted string literals is never treated as a comment marker.
+func stripQuernComments(source string) string {
+	out := make([]byte, 0, len(source))
+	n := len(source)
+	inString := false
+	inComment := false
+	for i := 0; i < n; i++ {
+		c := source[i]
+		isSlashSlash := i+1 < n && c == '/' && source[i+1] == '/'
+
+		// Inside a block comment: only watch for the closing "//".
+		if inComment {
+			if isSlashSlash {
+				inComment = false
+				i++ // consume the second '/'
+				continue
+			}
+			if c == '\n' {
+				out = append(out, '\n') // keep line structure
+			}
+			continue
+		}
+
+		// Inside a string literal: copy verbatim, honour escapes.
+		if inString {
+			out = append(out, c)
+			if c == '\\' && i+1 < n {
+				i++
+				out = append(out, source[i])
+			} else if c == '"' {
+				inString = false
+			}
+			continue
+		}
+
+		if isSlashSlash {
+			// Opening delimiter: a closing "//" ahead means a block comment.
+			if hasClosingSlashSlash(source[i+2:]) {
+				inComment = true
+				i++ // consume the second '/'
+				continue
+			}
+			// Otherwise fall back to a classic line comment: skip to EOL.
+			for i < n && source[i] != '\n' {
+				i++
+			}
+			continue // leave i on the '\n' so it is emitted next
+		}
+
+		if c == '"' {
+			inString = true
+			out = append(out, c)
+			continue
+		}
+
+		out = append(out, c)
+	}
+	return string(out)
+}
+
+// hasClosingSlashSlash reports whether s contains a "//" pair that is not
+// hidden inside a double-quoted string literal.
+func hasClosingSlashSlash(s string) bool {
+	inStr := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if inStr {
+			if c == '\\' {
+				i++
+			} else if c == '"' {
+				inStr = false
+			}
+			continue
+		}
+		if c == '"' {
+			inStr = true
+			continue
+		}
+		if c == '/' && i+1 < len(s) && s[i+1] == '/' {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *Parser) Parse() (*Program, error) {
