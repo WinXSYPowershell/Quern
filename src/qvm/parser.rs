@@ -106,6 +106,11 @@ impl Parser {
         }
     }
 
+    /// 判断一个token是否是指令关键字（用于host_call参数边界检测）
+    fn is_keyword(token: &str) -> bool {
+        matches!(token, "crt" | "psh" | "pop" | "out" | "otn" | "del" | "fnc" | "cal" | "jmp" | "host_call")
+    }
+
     pub fn parse(mut self) -> Result<Program, SyntaxError> {
         let mut instructions = Vec::new();
         let mut functions = HashMap::new();
@@ -115,13 +120,13 @@ impl Parser {
             
             match cmd.as_str() {
                 "crt" => {
-                    self.consume("crt").map_err(|e| self.create_error("MissingArgument", 1001, &cmd))?;
-                    let name = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    self.consume("crt").map_err(|_| self.create_error("MissingArgument", 1001, &cmd))?;
+                    let name = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
                     instructions.push(Instruction::CreateStack(name));
                 }
                 "psh" => {
-                    self.consume("psh").map_err(|e| self.create_error("MissingArgument", 1001, &cmd))?;
-                    let stack_ref = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    self.consume("psh").map_err(|_| self.create_error("MissingArgument", 1001, &cmd))?;
+                    let stack_ref = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
                     // 检查下一个token是否是运算符
                     let next_token = if self.pos < self.tokens.len() {
                         self.tokens[self.pos].clone()
@@ -131,8 +136,8 @@ impl Parser {
                     
                     if next_token == "+" || next_token == "-" || next_token == "*" || next_token == "/" {
                         // 算术运算模式: psh stack_ref operator value
-                        let op_str = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
-                        let val_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                        let op_str = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                        let val_token = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
                         let op = ArithmeticOp::from_str(&op_str).map_err(|_| {
                             self.create_error("InvalidOperator", 1006, &op_str)
                         })?;
@@ -145,7 +150,7 @@ impl Parser {
                         instructions.push(Instruction::Arithmetic { stack: stack_name, operator: op, value: val_token });
                     } else {
                         // 普通push模式
-                        let val_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                        let val_token = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
                         let is_var = Self::is_variable(&val_token);
                         // 如果是变量，去掉前后的 @ 符号；否则保持原样
                         let val_content = if is_var { val_token[1..val_token.len()-1].to_string() } else { val_token };
@@ -153,45 +158,45 @@ impl Parser {
                     }
                 }
                 "pop" => {
-                    self.consume("pop").map_err(|e| self.create_error("MissingArgument", 1001, &cmd))?;
-                    let stack = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    self.consume("pop").map_err(|_| self.create_error("MissingArgument", 1001, &cmd))?;
+                    let stack = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
                     instructions.push(Instruction::Pop(stack));
                 }
                 "out" => {
-                    self.consume("out").map_err(|e| self.create_error("MissingArgument", 1001, &cmd))?;
-                    let id_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    self.consume("out").map_err(|_| self.create_error("MissingArgument", 1001, &cmd))?;
+                    let id_token = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
                     
                     let is_var = Self::is_variable(&id_token);
                     let id_content = if is_var { id_token[1..id_token.len()-1].to_string() } else { id_token };
                     instructions.push(Instruction::Out((id_content, is_var)));
                 }
                 "otn" => {
-                    self.consume("otn").map_err(|e| self.create_error("ParseError", 1003, &cmd))?;
+                    self.consume("otn").map_err(|_| self.create_error("ParseError", 1003, &cmd))?;
                     instructions.push(Instruction::PrintNewLine);
                 }
                 "del" => {
-                    self.consume("del").map_err(|e| self.create_error("MissingArgument", 1001, &cmd))?;
-                    let name = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    self.consume("del").map_err(|_| self.create_error("MissingArgument", 1001, &cmd))?;
+                    let name = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
                     instructions.push(Instruction::DeleteStack(name));
                 }
                 "fnc" => {
-                    self.consume("fnc").map_err(|e| self.create_error("MissingArgument", 1001, &cmd))?;
-                    let func_name = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
-                    self.expect("{").map_err(|e| self.create_error("MissingBrace", 1004, &cmd))?;
+                    self.consume("fnc").map_err(|_| self.create_error("MissingArgument", 1001, &cmd))?;
+                    let func_name = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    self.expect("{").map_err(|_| self.create_error("MissingBrace", 1004, &cmd))?;
                     
-                    let body = self.parse_block(&mut functions).map_err(|e| self.create_error("BlockParseError", 1005, &cmd))?;
+                    let body = self.parse_block(&mut functions).map_err(|_| self.create_error("BlockParseError", 1005, &cmd))?;
                     functions.insert(func_name, body);
                 }
                 "cal" => {
-                    self.consume("cal").map_err(|e| self.create_error("MissingArgument", 1001, &cmd))?;
-                    let func_name = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    self.consume("cal").map_err(|_| self.create_error("MissingArgument", 1001, &cmd))?;
+                    let func_name = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
                     instructions.push(Instruction::CallFunction(func_name));
                 }
                 "jmp" => {
                     // 1. 解析左侧操作数
-                    self.consume("jmp").map_err(|e| self.create_error("MissingArgument", 1001, &cmd))?;
+                    self.consume("jmp").map_err(|_| self.create_error("MissingArgument", 1001, &cmd))?;
                     
-                    let left_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    let left_token = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
                     let left_is_var = Self::is_variable(&left_token);
                     let left_content = if left_is_var { 
                         left_token[1..left_token.len()-1].to_string() 
@@ -200,7 +205,7 @@ impl Parser {
                     };
 
                     // 2. 解析右侧操作数
-                    let right_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    let right_token = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
                     let right_is_var = Self::is_variable(&right_token);
                     let right_content = if right_is_var { 
                         right_token[1..right_token.len()-1].to_string() 
@@ -209,14 +214,14 @@ impl Parser {
                     };
 
                     // 3. 解析操作符
-                    let op_str = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    let op_str = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
                     let op = ComparisonOp::from_str(&op_str).map_err(|_| {
                         self.create_error("InvalidOperator", 1006, &op_str)
                     })?;
 
                     // 4. 解析目标函数
-                    self.consume("cal").map_err(|e| self.create_error("MissingCalKeyword", 1007, &cmd))?;
-                    let target_func = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    self.consume("cal").map_err(|_| self.create_error("MissingCalKeyword", 1007, &cmd))?;
+                    let target_func = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
 
                     // 5. 生成指令
                     // 使用正确的字段名 left_stack 和 right_stack
@@ -226,6 +231,32 @@ impl Parser {
                         op, 
                         target_func, 
                     });
+                }
+                "host_call" => {
+                    // 宿主调用协议: host_call <Module>.<Func> <Args...>
+                    self.consume("host_call").map_err(|_| self.create_error("MissingArgument", 1001, &cmd))?;
+                    let module_func = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    
+                    // 解析 Module.Func 格式
+                    let parts: Vec<&str> = module_func.splitn(2, '.').collect();
+                    if parts.len() != 2 {
+                        return Err(self.create_error("InvalidHostCallSyntax", 1008, &module_func));
+                    }
+                    let module = parts[0].to_string();
+                    let func = parts[1].to_string();
+                    
+                    // 收集后续参数，直到遇到指令关键字或EOF
+                    let mut args = Vec::new();
+                    while self.pos < self.tokens.len() {
+                        let next = &self.tokens[self.pos];
+                        // 遇到指令关键字或右花括号则停止收集参数
+                        if Self::is_keyword(next) || next == "}" {
+                            break;
+                        }
+                        args.push(self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?);
+                    }
+                    
+                    instructions.push(Instruction::HostCall { module, func, args });
                 }
                 _ => {
                     return Err(self.create_error("UnknownCommand", 1000, &cmd));
@@ -346,10 +377,10 @@ impl Parser {
                     block_instrs.push(Instruction::CallFunction(func_name));
                 }
                 "jmp" => {
-                    self.consume("jmp").map_err(|e| self.create_error("MissingArgument", 1001, &cmd).to_string())?;
+                    self.consume("jmp").map_err(|_| self.create_error("MissingArgument", 1001, &cmd).to_string())?;
                     
                     // 1. 解析左侧操作数
-                    let left_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
+                    let left_token = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
                     let left_is_var = Self::is_variable(&left_token);
                     let left_content = if left_is_var { 
                         left_token[1..left_token.len()-1].to_string() 
@@ -358,7 +389,7 @@ impl Parser {
                     };
 
                     // 2. 解析右侧操作数
-                    let right_token = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
+                    let right_token = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
                     let right_is_var = Self::is_variable(&right_token);
                     let right_content = if right_is_var { 
                         right_token[1..right_token.len()-1].to_string() 
@@ -367,14 +398,14 @@ impl Parser {
                     };
 
                     // 3. 解析操作符
-                    let op_str = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
+                    let op_str = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
                     let op = ComparisonOp::from_str(&op_str).map_err(|_| {
                         self.create_error("InvalidOperator", 1006, &op_str).to_string()
                     })?;
 
                     // 4. 解析目标函数
-                    self.consume("cal").map_err(|e| self.create_error("MissingCalKeyword", 1007, &cmd).to_string())?;
-                    let target_func = self.next_arg().map_err(|e| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
+                    self.consume("cal").map_err(|_| self.create_error("MissingCalKeyword", 1007, &cmd).to_string())?;
+                    let target_func = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
 
                     // 5. 生成指令
                     block_instrs.push(Instruction::ConditionalJump { 
@@ -383,6 +414,31 @@ impl Parser {
                         op, 
                         target_func, 
                     });
+                }
+                "host_call" => {
+                    // 宿主调用协议: host_call <Module>.<Func> <Args...>
+                    self.consume("host_call").map_err(|_| self.create_error("MissingArgument", 1001, &cmd).to_string())?;
+                    let module_func = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
+                    
+                    // 解析 Module.Func 格式
+                    let parts: Vec<&str> = module_func.splitn(2, '.').collect();
+                    if parts.len() != 2 {
+                        return Err(format!("Invalid host_call syntax: {}", module_func));
+                    }
+                    let module = parts[0].to_string();
+                    let func = parts[1].to_string();
+                    
+                    // 收集后续参数
+                    let mut args = Vec::new();
+                    while self.pos < self.tokens.len() {
+                        let next = &self.tokens[self.pos];
+                        if Self::is_keyword(next) || next == "}" {
+                            break;
+                        }
+                        args.push(self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?);
+                    }
+                    
+                    block_instrs.push(Instruction::HostCall { module, func, args });
                 }
                 _ => {
                     return Err(format!("Unknown command in block: {}", cmd));

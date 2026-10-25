@@ -66,6 +66,12 @@ pub enum Instruction {
         op: ComparisonOp, 
         target_func: String,
     },
+    // --- Host API: host_call <Module>.<Func> <Args...> ---
+    HostCall {
+        module: String,
+        func: String,
+        args: Vec<String>,
+    },
 }
 
 pub struct Program {

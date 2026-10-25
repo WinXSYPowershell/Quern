@@ -4,12 +4,11 @@ use std::process;
 
 mod errors;
 mod instructions;
-mod vm;
+mod qvm;
 mod parser;
 
-use errors::SyntaxError;
-use instructions::{Program, Instruction, ArithmeticOp, ComparisonOp};
-use vm::VM;
+use instructions::Program;
+use qvm::QVM;
 use parser::Parser;
 
 fn main() {
@@ -68,7 +67,7 @@ fn main() {
             if check_mode {
                 println!("Syntax Check Passed: No errors detected in {}", filename);
             } else {
-                let mut vm = VM::new();
+                let mut vm = QVM::new();
                 vm.execute(&program);
             }
         }
