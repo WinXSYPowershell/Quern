@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 )
 
@@ -14,12 +13,12 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("Usage: quern-translator --Run <file.q> [--UnuseDeadCodeEli] [--LgnWarning] [--ForceRep] [--ExpandLoop] [--ConstCalc] [--AutoAOTMax N] [--AutoAOTPar \"params\"] [--AutoAOTClose]")
+		fmt.Println("Usage: quern-translator --Run <file.q> [--UnuseDeadCodeEli] [--LgnWarning] [--ForceRep] [--ExpandLoop] [--ConstCalc]")
 		os.Exit(1)
 	}
 
 	if os.Args[1] != "--Run" || len(os.Args) < 3 {
-		fmt.Println("Usage: quern-translator --Run <file.q> [--UnuseDeadCodeEli] [--LgnWarning] [--ForceRep] [--ExpandLoop] [--ConstCalc] [--AutoAOTMax N] [--AutoAOTPar \"params\"] [--AutoAOTClose]")
+		fmt.Println("Usage: quern-translator --Run <file.q> [--UnuseDeadCodeEli] [--LgnWarning] [--ForceRep] [--ExpandLoop] [--ConstCalc]")
 		os.Exit(1)
 	}
 
@@ -33,55 +32,18 @@ func main() {
 	forceStrict := false    // --ForceRep (Strict mode: refuse to compile if warnings exist)
 	extandLoop := false     // --ExpandLoop (use old static unroll method for loops)
 	constCalc := false      // --ConstCalc (pre-evaluate expressions at translation time)
-
-	// AutoAOT Flags
-	autoAOTMax   := 1000   // --AutoAOTMax N  (function call threshold for AOT trigger)
-	autoAOTPar   := ""     // --AutoAOTPar "params" (extra params passed to QuernBuild)
-	autoAOTClose := false  // --AutoAOTClose (disable AutoAOT entirely)
-
-	// Parse flags - use index-based loop to handle flags with values
-	args := os.Args[3:]
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		switch {
-		case arg == "--UnuseDeadCodeEli":
+	for _, arg := range os.Args[3:] {
+		switch arg {
+		case "--UnuseDeadCodeEli":
 			enableDCE = true
-		case arg == "--LgnWarning":
+		case "--LgnWarning":
 			ignoreWarnings = true
-		case arg == "--ForceRep":
+		case "--ForceRep":
 			forceStrict = true
-		case arg == "--ExpandLoop":
+		case "--ExpandLoop":
 			extandLoop = true
-		case arg == "--ConstCalc":
+		case "--ConstCalc":
 			constCalc = true
-		case strings.HasPrefix(arg, "--AutoAOTMax"):
-			// Extract value: supports --AutoAOTMax=5000 or --AutoAOTMax 5000
-			val := ""
-			if eq := strings.Index(arg, "="); eq != -1 {
-				val = arg[eq+1:]
-			}
-			if val == "" && i+1 < len(args) {
-				i++
-				val = args[i]
-			}
-			if v, err := strconv.Atoi(val); err == nil {
-				autoAOTMax = v
-			} else {
-				fmt.Printf("[Warn] Invalid --AutoAOTMax value: %s, using default %d\n", val, autoAOTMax)
-			}
-		case strings.HasPrefix(arg, "--AutoAOTPar"):
-			// Extract value: supports --AutoAOTPar="params" or --AutoAOTPar "params"
-			val := ""
-			if eq := strings.Index(arg, "="); eq != -1 {
-				val = arg[eq+1:]
-			}
-			if val == "" && i+1 < len(args) {
-				i++
-				val = args[i]
-			}
-			autoAOTPar = val
-		case arg == "--AutoAOTClose":
-			autoAOTClose = true
 		}
 	}
 
@@ -245,41 +207,6 @@ func main() {
 	if err != nil {
 		fmt.Printf("[Runtime Error] QVM execution failed: %v\n", err)
 	}
-
-	// 8. AutoAOT - Automatically compile bytecode to native code
-	// When AutoAOT is enabled (not closed by --AutoAOTClose), after QVM execution
-	// we invoke QuernBuild to AOT-compile the bytecode for optimized native execution.
-	// The --AutoAOTMax flag sets the function call threshold (default: 1000).
-	// The --AutoAOTPar flag allows passing additional parameters to QuernBuild.
-	if !autoAOTClose {
-		fmt.Printf("[Info] AutoAOT: threshold=%d, extra_params=%q\n", autoAOTMax, autoAOTPar)
-
-		// Build QuernBuild command arguments
-		// Default optimization flag: --ClangOFAST
-		// Additional params from --AutoAOTPar are appended before the input file
-		quernBuildArgs := []string{"--ClangOFAST"}
-		if autoAOTPar != "" {
-			// Split by spaces to get individual arguments
-			extraArgs := strings.Fields(autoAOTPar)
-			quernBuildArgs = append(quernBuildArgs, extraArgs...)
-		}
-		quernBuildArgs = append(quernBuildArgs, outputBytecodePath)
-
-		fmt.Printf("[AutoAOT] Running: ./QuernBuild.exe %s\n", strings.Join(quernBuildArgs, " "))
-
-		quernCmd := exec.Command("./QuernBuild.exe", quernBuildArgs...)
-		quernCmd.Stdout = os.Stdout
-		quernCmd.Stderr = os.Stderr
-
-		err = quernCmd.Run()
-		if err != nil {
-			fmt.Printf("[AutoAOT] QuernBuild failed: %v\n", err)
-		} else {
-			fmt.Println("[AutoAOT] AOT compilation completed successfully.")
-		}
-	} else {
-		fmt.Println("[Info] AutoAOT is disabled (--AutoAOTClose).")
-	}
 }
 
 // checkForUnusedItems performs a dry-run analysis to return a list of warning messages
@@ -318,3 +245,4 @@ func checkForUnusedItems(dce *DeadCodeEliminator, prog *Program) []string {
 	}
 	return warnings
 }
+
