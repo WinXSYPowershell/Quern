@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::sync::Mutex;
-use crate::instructions::{Instruction, Program, ArithmeticOp, ComparisonOp, DebugConfig};
-use std::io::{self, BufRead};
+use crate::instructions::{Instruction, Program, ArithmeticOp, ComparisonOp};
 
 // ============================================================
 // Host API 基础设施
@@ -85,12 +84,6 @@ pub struct QVM {
     stacks: HashMap<String, Vec<String>>,
     host_registry: HostRegistry,
     last_error: Option<String>,
-    /// 调试器配置
-    debug_config: DebugConfig,
-    /// 当前执行的指令索引
-    current_instruction_idx: usize,
-    /// 当前执行的函数名
-    current_function: Option<String>,
 }
 
 impl QVM {
@@ -99,15 +92,7 @@ impl QVM {
             stacks: HashMap::new(),
             host_registry: HostRegistry::new(),
             last_error: None,
-            debug_config: DebugConfig::new(),
-            current_instruction_idx: 0,
-            current_function: None,
         }
-    }
-
-    /// 设置调试器配置
-    pub fn set_debug_config(&mut self, config: DebugConfig) {
-        self.debug_config = config;
     }
 
     /// 获取宿主注册表引用（供C++侧注册函数/变量）
@@ -118,7 +103,7 @@ impl QVM {
     /// 执行完整程序
     pub fn execute(&mut self, program: &Program) {
         self.last_error = None;
-        if let Err(e) = self.execute_instructions(&program.instructions, &program.functions, &program.instruction_line_numbers, None) {
+        if let Err(e) = self.execute_instructions(&program.instructions, &program.functions) {
             // [修复 E0382] 先打印再move，避免借用已移动的值
             eprintln!("Runtime Error: {}", e);
             self.last_error = Some(e);
@@ -139,100 +124,8 @@ impl QVM {
         self.run_command(&content)
     }
 
-    // ============================================================
-    // 调试器方法
-    // ============================================================
-
-    /// 打印当前所有栈的状态（--debug 模式）
-    fn print_stack_state(&self, instruction_idx: usize, line_number: usize) {
-        eprintln!("\n=== Debugger State (instruction #{}, line {}) ===", instruction_idx, line_number);
-        eprintln!("--- Stacks ---");
-        if self.stacks.is_empty() {
-            eprintln!("(no stacks)");
-        } else {
-            let mut sorted_stacks: Vec<_> = self.stacks.iter().collect();
-            sorted_stacks.sort_by_key(|(name, _)| name.clone());
-            for (name, stack) in sorted_stacks {
-                if stack.is_empty() {
-                    eprintln!("  {}: [empty]", name);
-                } else {
-                    let top = stack.last().unwrap();
-                    eprintln!("  {}: [{} ... {}] (top={})", name, stack.len(), top, top);
-                }
-            }
-        }
-        eprintln!("=== End Debugger State ===\n");
-    }
-
-    /// 打印指定栈的完整内容（--PrintStack 功能）
-    pub fn print_stack_contents(&self, stack_name: &str) {
-        if let Some(stack) = self.stacks.get(stack_name) {
-            eprintln!("\n=== Stack '{}' Contents ===", stack_name);
-            if stack.is_empty() {
-                eprintln!("  (empty)");
-            } else {
-                for (i, val) in stack.iter().enumerate() {
-                    eprintln!("  [{}] {}", i, val);
-                }
-            }
-            eprintln!("=== End Stack '{}' ===\n", stack_name);
-        } else {
-            eprintln!("Warning: Stack '{}' does not exist", stack_name);
-        }
-    }
-
-    /// 检查是否应该暂停（断点或单步模式）
-    fn check_debug_pause(&self, line_number: usize) -> bool {
-        if self.debug_config.breakpoints.contains(&line_number) {
-            eprintln!("\n>>> Breakpoint hit at line {} <<<", line_number);
-            eprintln!("Press Enter to continue, or type 'continue' to resume:");
-            let mut input = String::new();
-            io::stdin().read_line(&mut input).unwrap();
-            return true;
-        }
-
-        if self.debug_config.single_step {
-            eprintln!("\n>>> Single step: press Enter to continue <<<");
-            let mut input = String::new();
-            io::stdin().read_line(&mut input).unwrap();
-            return true;
-        }
-
-        false
-    }
-
-    fn execute_instructions(
-        &mut self,
-        instructions: &[Instruction],
-        functions: &HashMap<String, Vec<Instruction>>,
-        line_numbers: &[usize],
-        function_name: Option<String>,
-    ) -> Result<(), String> {
-        self.current_function = function_name;
-        for (idx, instr) in instructions.iter().enumerate() {
-            self.current_instruction_idx = idx;
-
-            // 获取当前指令的行号
-            let line_number = if idx < line_numbers.len() {
-                line_numbers[idx]
-            } else {
-                0
-            };
-
-            // --debug 模式：执行前打印栈状态
-            if self.debug_config.debug_mode {
-                self.print_stack_state(idx, line_number);
-            }
-
-            // 检查断点（在执行指令前检查）
-            if self.debug_config.breakpoints.contains(&line_number) {
-                eprintln!("\n>>> Breakpoint hit at line {} <<<", line_number);
-                eprintln!("Press Enter to continue:");
-                let mut input = String::new();
-                io::stdin().read_line(&mut input).unwrap();
-            }
-
-
+    fn execute_instructions(&mut self, instructions: &[Instruction], functions: &HashMap<String, Vec<Instruction>>) -> Result<(), String> {
+        for instr in instructions {
             match instr {
                 Instruction::CreateStack(name) => {
                     self.stacks.entry(name.clone()).or_insert_with(Vec::new);
@@ -300,7 +193,7 @@ impl QVM {
                 }
                 Instruction::CallFunction(func_name) => {
                     if let Some(body) = functions.get(func_name) {
-                        self.execute_instructions(body, functions, &[], Some(func_name.clone()))?;
+                        self.execute_instructions(body, functions)?;
                     } else {
                         eprintln!("Runtime Error: Function '{}' not defined", func_name);
                     }
@@ -321,7 +214,7 @@ impl QVM {
                     if let (Some(l), Some(r)) = (left_val, right_val) {
                         if self.compare(&l, &r, op.clone()) {
                             if let Some(body) = functions.get(target_func) {
-                                self.execute_instructions(body, functions, &[], Some(target_func.clone()))?;
+                                self.execute_instructions(body, functions)?;
                             } else {
                                 eprintln!("Runtime Error: Jump target function '{}' not defined", target_func);
                             }
@@ -377,11 +270,6 @@ impl QVM {
                         }
                     }
                 }
-            }
-
-            // 执行后检查断点/单步暂停
-            if self.debug_config.breakpoints.contains(&line_number) || self.debug_config.single_step {
-                self.check_debug_pause(line_number);
             }
         }
         Ok(())

@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 // --- Instruction Definitions ---
 
@@ -74,65 +74,7 @@ pub enum Instruction {
     },
 }
 
-// ============================================================
-// 调试器配置
-// ============================================================
-
-/// 调试器配置结构体
-#[derive(Debug, Clone)]
-pub struct DebugConfig {
-    /// --debug 模式：每条指令执行前打印栈状态
-    pub debug_mode: bool,
-    /// --BreakPoint <line>：断点行号集合
-    pub breakpoints: HashSet<usize>,
-    /// --Step：单步执行模式
-    pub single_step: bool,
-    /// --PrintStack <stack_name>：要查看的栈变量名
-    pub print_stack: Option<String>,
-}
-
-impl DebugConfig {
-    pub fn new() -> Self {
-        DebugConfig {
-            debug_mode: false,
-            breakpoints: HashSet::new(),
-            single_step: false,
-            print_stack: None,
-        }
-    }
-
-    /// 启用调试模式
-    pub fn enable_debug(&mut self) {
-        self.debug_mode = true;
-    }
-
-    /// 添加断点行号
-    pub fn add_breakpoint(&mut self, line: usize) {
-        self.breakpoints.insert(line);
-    }
-
-    /// 启用单步执行
-    pub fn enable_single_step(&mut self) {
-        self.single_step = true;
-    }
-
-    /// 设置要查看的栈
-    pub fn set_print_stack(&mut self, stack_name: String) {
-        self.print_stack = Some(stack_name);
-    }
-}
-
-impl Default for DebugConfig {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 pub struct Program {
     pub instructions: Vec<Instruction>,
     pub functions: HashMap<String, Vec<Instruction>>,
-    /// 每条顶层指令对应的源文件行号
-    pub instruction_line_numbers: Vec<usize>,
-    /// 每个函数体中指令对应的源文件行号
-    pub function_line_numbers: HashMap<String, Vec<usize>>,
 }
