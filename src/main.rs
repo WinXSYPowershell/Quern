@@ -1,1 +1,1 @@
-include!("logger/main.rs");
+include!("qvm/main.rs");

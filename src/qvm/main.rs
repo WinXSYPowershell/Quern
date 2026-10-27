@@ -7,7 +7,6 @@ mod instructions;
 mod qvm;
 mod parser;
 
-use instructions::Program;
 use qvm::QVM;
 use parser::Parser;
 
