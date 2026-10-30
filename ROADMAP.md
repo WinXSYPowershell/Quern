@@ -5,22 +5,43 @@
 ---
 
 ## 🎯 一、核心功能（Core）
-
 ### 3. 宿主 API（Host API）设计
 
 - [ ] 定义宿主调用协议：`host_call <Module>.<Func> <Args...>`
 - [ ] 在 qvm.rs 中增加 HostCall 指令
 - [ ] 设计一个 FFI 接口，让 Rust/C++ 宿主能注册函数
-- [ ] 提供一套标准宿主库（Console、File、Time、Math 等）
 
 ### 4. 调试器
 
 - [ ] `--debug` 模式：每条指令执行前打印栈状态
 - [ ] 支持断点（`--breakpoint <line>`）
 - [ ] 支持单步执行（`--step`）
-- [ ] 支持变量查看（`--print-stack`）
+- [ ] 支持变量查看（`--print-stack`）   
 
----
+### 5.完整项目
+ `Quern.Reg` Mod 语法  ✅  ❌  AOT 前端不加载 Mod 
+
+
+
+#### 1 `Loop` 未启用 `--ExpandLoop` 时静默跳过
+
+Go 前端 `translateLoop` 在 `expandLoop == false` 时直接 `return`，不生成任何字节码，也不报错。
+
+建议：使用循环时始终加 `--ExpandLoop`。
+
+
+#### 2 `Import` 不加载模块
+
+`Import X` 仅打印 `[Info] Importing X`。
+
+建议：使用 QLM 安装 `.js` Mod，并通过 Mod 的 `Quern.Reg` 注入语法；或直接使用 `#VMCODE` 内联字节码。
+
+#### 4 已知不一致
+`arg_logics.rs` 中向 QLM 传递的模块管理参数是**小写**（如 `--install`），而 QLM 主程序的动作比较是**大小写敏感**的（期望 `--Install`）。因此通过 Launcher 执行模块管理可能报 `Unknown action: --install`。**当前推荐直接调用 `Qlm.exe --Install ...`**（大写形式）。此问题属于启动器与 QLM 的接口不一致，修复方式是在 `arg_logics.rs` 中改为大写动作名。
+
+#### 5 关于 AOT 的 del 问题
+触发条件：任何经过 AOT 编译（QuernBuild）并运行的程序，只要执行到 del 之后紧跟 psh。
+这不止影响循环——任何 del x → crt x → psh x v 的模式都会炸。
 
 ## 📚 二、文档与教育（Documentation）
 
