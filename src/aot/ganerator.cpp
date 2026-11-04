@@ -47,7 +47,7 @@ class CodeGenerator {
     }
 
     std::string generate_instr(const Instruction& instr) const {
-        if (instr.type == "crt") return "";  // Stack init handled in main() loop
+        if (instr.type == "crt") return "init_stack(&" + sanitize_c_id(instr.arg1) + ");";
         
         // 辅助 lambda：去除首尾引号并转义
         auto process_string = [](const std::string& s) -> std::string {
@@ -226,12 +226,25 @@ typedef struct {
 } Stack;
 
 void init_stack(Stack* s) {
+    // Properly free existing contents before reallocating.
+    // For a zero-initialized global Stack (items == NULL, size == 0),
+    // this loop does nothing and free(NULL) is a no-op.
+    if (s->items != NULL) {
+        for (int i = 0; i < s->size; i++) free(s->items[i]);
+        free(s->items);
+    }
     s->capacity = 16;
     s->size = 0;
     s->items = (char**)malloc(s->capacity * sizeof(char*));
 }
 
 void push_stack(Stack* s, const char* val) {
+    // If capacity is 0 (stack was freed by del/free_stack), re-initialize from scratch
+    if (s->capacity == 0) {
+        s->capacity = 16;
+        s->size = 0;
+        s->items = (char**)malloc(s->capacity * sizeof(char*));
+    }
     if (s->size == s->capacity) {
         s->capacity *= 2;
         s->items = (char**)realloc(s->items, s->capacity * sizeof(char*));
