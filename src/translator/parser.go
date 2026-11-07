@@ -170,9 +170,9 @@ func (p *Parser) parseLine(line string) (Node, error) {
 	if strings.HasPrefix(line, "Import") {
 		parts := strings.Fields(line)
 		if len(parts) >= 2 {
-			fmt.Printf("[Info] Importing: %s\n", strings.Trim(parts[1], "\""))
-			return nil, nil
+			return &ImportNode{ModuleName: strings.Trim(parts[1], "\"")}, nil
 		}
+		return nil, fmt.Errorf("Invalid Import statement: %s", line)
 	}
 
 	if strings.HasPrefix(line, "Function") {
@@ -187,6 +187,12 @@ func (p *Parser) parseLine(line string) (Node, error) {
 		return p.parseEntrust(line)
 	}
 
+	// Allow unknown top-level statements to become CustomNode so that
+	// JS modules registered via Quern.Reg can handle them at translation time.
+	fields := strings.Fields(line)
+	if len(fields) > 0 {
+		return &CustomNode{RawLine: line, Keyword: fields[0]}, nil
+	}
 	return nil, fmt.Errorf("Unknown top-level statement: %s", line)
 }
 

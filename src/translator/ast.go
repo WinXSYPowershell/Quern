@@ -195,3 +195,9 @@ type VmCodeNode struct {
 }
 
 func (v *VmCodeNode) Type() string { return "VmCodeNode" }
+
+type ImportNode struct {
+	ModuleName string
+}
+
+func (i *ImportNode) Type() string { return "ImportNode" }

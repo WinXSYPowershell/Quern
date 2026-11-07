@@ -32,7 +32,6 @@ func main() {
 	forceStrict := false    // --ForceRep (Strict mode: refuse to compile if warnings exist)
 	extandLoop := false     // --ExpandLoop (use old static unroll method for loops)
 	constCalc := false      // --ConstCalc (pre-evaluate expressions at translation time)
-	noAutoMods := false     // --NoAutoMods (disable automatic mod loading)
 	for _, arg := range os.Args[3:] {
 		switch arg {
 		case "--UnuseDeadCodeEli":
@@ -45,23 +44,19 @@ func main() {
 			extandLoop = true
 		case "--ConstCalc":
 			constCalc = true
-		case "--NoAutoMods":
-			noAutoMods = true
 		}
 	}
 
 	// 1. Initialize Mod Loader
-	loader := NewModLoader(modDir)   // ← 传入 modDir（配合 modloader.go 改动）
+	loader := NewModLoader()
 
 	// 2. Load Mods
-	if noAutoMods {
-    	fmt.Println("[Info] --NoAutoMods: skipping eager mod loading. Use `Import \"name\"` to load a module.")
-	} else if _, err := os.Stat(modDir); err == nil {
-    	if err := loader.LoadModsFromDirectory(modDir); err != nil {
-        	fmt.Printf("[Error] Failed to load mods: %v\n", err)
-    	}
+	if _, err := os.Stat(modDir); err == nil {
+		if err := loader.LoadModsFromDirectory(modDir); err != nil {
+			fmt.Printf("[Error] Failed to load mods: %v\n", err)
+		}
 	} else {
-    	fmt.Println("[Info] No mods directory found.")
+		fmt.Println("[Info] No mods directory found.")
 	}
 
 	// 3. Read Source

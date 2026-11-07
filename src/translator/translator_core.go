@@ -104,6 +104,23 @@ func (t *Translator) Translate(prog *Program) string {
 		}
 	}
 
+	// Process Import statements: load JS modules and register syntax handlers
+	// This is done after the first pass so that data structures (Lists, Dicts)
+	// are already initialized and available to JS modules via Quern.DataStruct
+	for _, node := range prog.Nodes {
+		if imp, ok := node.(*ImportNode); ok {
+			if t.ModLoader != nil {
+				// Expose current data structures to JS modules
+				t.ModLoader.SetDataStructures(t.Lists, t.Dicts, make(map[string]string))
+				if err := t.ModLoader.LoadModule(imp.ModuleName); err != nil {
+					fmt.Printf("[Error] Failed to load module '%s': %v\n", imp.ModuleName, err)
+				}
+			} else {
+				fmt.Printf("[Warn] ModLoader not initialized, cannot import '%s'\n", imp.ModuleName)
+			}
+		}
+	}
+
 	// Second pass: Translate Functions and detect Main
 	for _, node := range prog.Nodes {
 		if fn, ok := node.(*FunctionDef); ok {
@@ -374,6 +391,10 @@ func (t *Translator) translateBody(nodes []Node, localAliases map[string]string)
 
 		case *VmCodeNode:
 			t.emitVmCode(n)
+
+		case *ImportNode:
+			// Imports are processed at top level only, skip in body
+			continue
 
 		case *CustomNode:
 			if t.ModLoader != nil {

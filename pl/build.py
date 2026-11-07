@@ -38,7 +38,7 @@ def safe_move(source, destination):
     """
     src_path = Path(source)
     dst_path = Path(destination)
-    
+
     if not src_path.exists():
         print(f"[WARNING] 源文件不存在，跳过移动: {src_path}")
         return
@@ -68,7 +68,7 @@ def load_config():
     if not config_path.exists():
         print(f"[ERROR] 找不到配置文件: {config_path}")
         sys.exit(1)
-    
+
     with open(config_path, 'r', encoding='utf-8') as f:
         return json.load(f)
 
@@ -104,11 +104,11 @@ def main():
             (target_dir / "Quern_cargo.exe").unlink()
         for d_file in target_dir.glob("*.d"):
             d_file.unlink()
-            
+
         main_rs.write_text('include!("qvm/main.rs");', encoding='utf-8')
         print(f"[INFO] main.rs 内容: {main_rs.read_text(encoding='utf-8')}")
         print("[INFO] Removed cache files of last build")
-        
+
         run_command([rust_bin, "build", "--release"])
         safe_move(target_dir / "Quern_cargo.exe", template_path / "Windows" / "Qvm.exe")
 
@@ -116,13 +116,13 @@ def main():
         print("[INFO] Switching to Quern Launcher build target...")
         main_rs.write_text('include!("logger/main.rs");', encoding='utf-8')
         print(f"[INFO] main.rs 内容: {main_rs.read_text(encoding='utf-8')}")
-        
+
         if (target_dir / "Quern_cargo.exe").exists():
             (target_dir / "Quern_cargo.exe").unlink()
         for d_file in target_dir.glob("*.d"):
             d_file.unlink()
         print("[INFO] Removed cache files of Qvm")
-        
+
         run_command([rust_bin, "build", "--release"])
         safe_move(target_dir / "Quern_cargo.exe", template_path / "Windows" / "Quern.exe")
 
@@ -135,7 +135,7 @@ def main():
         # Build 1: Qvm
         run_command(["wsl", "rm", "-f", f"{wsl_target_dir}/Quern_cargo.exe"])
         run_command(["wsl", "find", wsl_target_dir, "-name", "*.d", "-delete"])
-        
+
         print("[INFO] Building Qvm...")
         run_command(["wsl", "cargo", "build", "--release"])
         safe_move(target_dir / "Quern_cargo.exe", template_path / "Windows" / "Qvm.exe")
@@ -144,7 +144,7 @@ def main():
         print("[INFO] Switching to Quern Launcher build target...")
         run_command(["wsl", "rm", "-f", f"{wsl_target_dir}/Quern_cargo.exe"])
         run_command(["wsl", "find", wsl_target_dir, "-name", "*.d", "-delete"])
-        
+
         print("[INFO] Building Quern...")
         run_command(["wsl", "cargo", "build", "--release"])
         safe_move(target_dir / "Quern_cargo.exe", template_path / "Windows" / "Quern.exe")
@@ -188,8 +188,8 @@ def main():
         env = os.environ.copy()
         env.update({"CGO_ENABLED": "0", "GOOS": "windows", "GOARCH": "amd64"})
         run_command([
-            go_bin, "build", "-trimpath", 
-            "-ldflags=-s -w -buildmode=exe", 
+            go_bin, "build", "-trimpath",
+            "-ldflags=-s -w -buildmode=exe",
             "-o", "Quernc.exe", "."
         ], env=env)
         safe_move("Quernc.exe", template_path / "Windows" / "Quernc.exe")
@@ -198,8 +198,8 @@ def main():
         env = os.environ.copy()
         env.update({"CGO_ENABLED": "0", "GOOS": "linux", "GOARCH": "amd64"})
         run_command([
-            go_bin, "build", "-trimpath", 
-            "-ldflags=-s -w", 
+            go_bin, "build", "-trimpath",
+            "-ldflags=-s -w",
             "-o", "Quernc-linux", "."
         ], env=env)
         safe_move("Quernc-linux", template_path / "Linux" / "Quernc")
@@ -208,8 +208,8 @@ def main():
         env = os.environ.copy()
         env.update({"CGO_ENABLED": "0", "GOOS": "darwin", "GOARCH": "arm64"})
         run_command([
-            go_bin, "build", "-trimpath", 
-            "-ldflags=-s -w", 
+            go_bin, "build", "-trimpath",
+            "-ldflags=-s -w",
             "-o", "Quernc-macOS-arm64", "."
         ], env=env)
         safe_move("Quernc-macOS-arm64", template_path / "macOS" / "arm64" / "Quernc")
