@@ -64,7 +64,7 @@ fn main() {
     } else if args.web_list { // 直接判断布尔值
         Some(("WebList", "".to_string()))
     } else if args.module_install_all { // 直接判断布尔值
-        Some(("ModuleInstall", "".to_string()))
+        Some(("ModuleInstallAll", "".to_string()))
     } else if args.local_list { // 直接判断布尔值
         Some(("LocalList", "".to_string()))
     } else if args.aot_build {

@@ -105,7 +105,7 @@ pub fn execute_module_install(module_name: &str, trace_id: &str) -> Result<(), S
     info!(trace_id = trace_id, "Executing Qlm.exe to install module: {}", module_name);
 
     let mut cmd = Command::new("Qlm.exe");
-    cmd.arg("--install").arg(module_name);
+    cmd.arg("--Install").arg(module_name);
 
     let output = cmd.output()
         .map_err(|e| format!("Failed to execute Qlm.exe: {}", e))?;
@@ -125,7 +125,7 @@ pub fn execute_module_delete(module_name: &str, trace_id: &str) -> Result<(), St
     info!(trace_id = trace_id, "Executing Qlm.exe to delete module: {}", module_name);
 
     let mut cmd = Command::new("Qlm.exe");
-    cmd.arg("--delete").arg(module_name);
+    cmd.arg("--Delete").arg(module_name);
 
     let output = cmd.output()
         .map_err(|e| format!("Failed to execute Qlm.exe: {}", e))?;
@@ -145,7 +145,7 @@ pub fn execute_module_disable(module_name: &str, trace_id: &str) -> Result<(), S
     info!(trace_id = trace_id, "Executing Qlm.exe to disable module: {}", module_name);
 
     let mut cmd = Command::new("Qlm.exe");
-    cmd.arg("--disable").arg(module_name);
+    cmd.arg("--Disable").arg(module_name);
 
     let output = cmd.output()
         .map_err(|e| format!("Failed to execute Qlm.exe: {}", e))?;
@@ -165,7 +165,7 @@ pub fn execute_module_enable(module_name: &str, trace_id: &str) -> Result<(), St
     info!(trace_id = trace_id, "Executing Qlm.exe to enable module: {}", module_name);
 
     let mut cmd = Command::new("Qlm.exe");
-    cmd.arg("--enable").arg(module_name);
+    cmd.arg("--Enable").arg(module_name);
 
     let output = cmd.output()
         .map_err(|e| format!("Failed to execute Qlm.exe: {}", e))?;
@@ -185,7 +185,7 @@ pub fn execute_web_list(_script_name: &str, trace_id: &str) -> Result<(), String
     info!(trace_id = trace_id, "Executing Qlm.exe to list cloud modules");
 
     let mut cmd = Command::new("Qlm.exe");
-    cmd.arg("--web-list");
+    cmd.arg("--Web-List");
 
     let output = cmd.output()
         .map_err(|e| format!("Failed to execute Qlm.exe: {}", e))?;
@@ -205,7 +205,7 @@ pub fn execute_local_list(_script_name: &str, trace_id: &str) -> Result<(), Stri
     info!(trace_id = trace_id, "Executing Qlm.exe to list local modules");
 
     let mut cmd = Command::new("Qlm.exe");
-    cmd.arg("--mods-list");
+    cmd.arg("--Mods-List");
 
     let output = cmd.output()
         .map_err(|e| format!("Failed to execute Qlm.exe: {}", e))?;
@@ -225,7 +225,7 @@ pub fn execute_web_search(search_query: &str, trace_id: &str) -> Result<(), Stri
     info!(trace_id = trace_id, "Executing Qlm.exe to search web modules with query: {}", search_query);
 
     let mut cmd = Command::new("Qlm.exe");
-    cmd.arg("--web-search").arg(search_query);
+    cmd.arg("--Web-Search").arg(search_query);
 
     let output = cmd.output()
         .map_err(|e| format!("Failed to execute Qlm.exe: {}", e))?;
