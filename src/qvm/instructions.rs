@@ -72,6 +72,23 @@ pub enum Instruction {
         func: String,
         args: Vec<String>,
     },
+    // --- Socket 网络指令 ---
+    Socket {
+        stack: String,
+        protocol: String,
+        address: String,
+        port: u16,
+    },
+    Send {
+        stack: String,
+    },
+    Receive {
+        stack: String,
+    },
+    Close {
+        stack: String,
+    },
+
 }
 
 // ============================================================

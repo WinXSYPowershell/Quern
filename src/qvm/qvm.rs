@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::sync::Mutex;
 use crate::instructions::{Instruction, Program, ArithmeticOp, ComparisonOp, DebugConfig};
-use std::io::{self, BufRead};
+use std::io::{self, Write};
+use std::net::{TcpStream, Shutdown};
 
 // ============================================================
 // Host API 基础设施
@@ -91,6 +92,10 @@ pub struct QVM {
     current_instruction_idx: usize,
     /// 当前执行的函数名
     current_function: Option<String>,
+    /// 活跃的 Socket 连接: handle_id -> TcpStream
+    connections: HashMap<String, TcpStream>,
+    /// 连接句柄计数器
+    conn_counter: u64,
 }
 
 impl QVM {
@@ -102,6 +107,8 @@ impl QVM {
             debug_config: DebugConfig::new(),
             current_instruction_idx: 0,
             current_function: None,
+            connections: HashMap::new(),
+            conn_counter: 0,
         }
     }
 
@@ -377,6 +384,139 @@ impl QVM {
                         }
                     }
                 }
+                // ============================================================
+                // Socket 网络指令执行
+                // ============================================================
+                Instruction::Socket { stack, protocol, address, port } => {
+                    // skt @stack@ tcp 127.0.0.1 8080
+                    // 创建连接，将连接句柄ID压入栈顶
+                    match self.create_connection(protocol, address, *port) {
+                        Ok(conn_id) => {
+                            if let Some(stack_data) = self.stacks.get_mut(stack) {
+                                stack_data.push(conn_id);
+                            } else {
+                                eprintln!("Runtime Error: Stack '{}' not found", stack);
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("Runtime Error: {}", e);
+                        }
+                    }
+                }
+                Instruction::Send { stack } => {
+                    // snd @stack@
+                    // 栈中顺序: [..., conn_id, data]
+                    // 弹出 data，弹出 conn_id，发送数据，conn_id 压回
+                    // 注意：先取出 conn_id 再释放栈借用，避免双重可变借用
+                    let (conn_id, data) = {
+                        if let Some(stack_data) = self.stacks.get_mut(stack) {
+                            if stack_data.len() >= 2 {
+                                let data = stack_data.pop().unwrap();
+                                let conn_id = stack_data.pop().unwrap();
+                                // 先压回 conn_id 保持连接可用
+                                stack_data.push(conn_id.clone());
+                                (conn_id, data)
+                            } else {
+                                eprintln!("Runtime Error: Stack '{}' has insufficient values for snd (need conn_id and data)", stack);
+                                return Ok(());
+                            }
+                        } else {
+                            eprintln!("Runtime Error: Stack '{}' not found", stack);
+                            return Ok(());
+                        }
+                    }; // stack_data 借用在此释放
+                    
+                    // 现在可以安全地借用 self 来获取连接
+                    let send_result = {
+                        if let Some(stream) = self.connections.get_mut(&conn_id) {
+                            stream.write_all(data.as_bytes())
+                        } else {
+                            eprintln!("Runtime Error: Connection '{}' not found", conn_id);
+                            Err(std::io::Error::new(std::io::ErrorKind::NotFound, "connection not found"))
+                        }
+                    };
+                    
+                    if let Err(e) = send_result {
+                        eprintln!("Runtime Error: Send failed: {}", e);
+                    } else {
+                        // 尝试刷新缓冲区
+                        if let Some(mut stream) = self.connections.get_mut(&conn_id) {
+                            let _ = stream.flush();
+                        }
+                    }
+                }
+                Instruction::Receive { stack } => {
+                    // rcv @stack@
+                    // 栈中顺序: [..., conn_id]
+                    // 弹出 conn_id，接收数据，conn_id 和 received_data 压回
+                    let conn_id = {
+                        if let Some(stack_data) = self.stacks.get_mut(stack) {
+                            if stack_data.len() >= 1 {
+                                stack_data.pop().unwrap()
+                            } else {
+                                eprintln!("Runtime Error: Stack '{}' has no connection ID for rcv", stack);
+                                return Ok(());
+                            }
+                        } else {
+                            eprintln!("Runtime Error: Stack '{}' not found", stack);
+                            return Ok(());
+                        }
+                    }; // stack_data 借用在此释放
+                    
+                    // 接收数据
+                    let received = {
+                        if let Some(mut stream) = self.connections.get_mut(&conn_id) {
+                            use std::io::Read;
+                            let mut buf = [0u8; 4096];
+                            match stream.read(&mut buf) {
+                                Ok(n) if n > 0 => {
+                                    String::from_utf8_lossy(&buf[..n]).to_string()
+                                }
+                                Ok(_) => {
+                                    eprintln!("Runtime Error: Connection closed by remote host");
+                                    String::new()
+                                }
+                                Err(e) => {
+                                    eprintln!("Runtime Error: Receive failed: {}", e);
+                                    String::new()
+                                }
+                            }
+                        } else {
+                            eprintln!("Runtime Error: Connection '{}' not found", conn_id);
+                            String::new()
+                        }
+                    }; // stream 借用在此释放
+                    
+                    // 压回 conn_id 和接收到的数据
+                    if let Some(stack_data) = self.stacks.get_mut(stack) {
+                        stack_data.push(conn_id);
+                        stack_data.push(received);
+                    }
+                }
+                Instruction::Close { stack } => {
+                    // cls @stack@
+                    // 弹出栈顶连接句柄ID，关闭连接
+                    let conn_id = {
+                        if let Some(stack_data) = self.stacks.get_mut(stack) {
+                            if stack_data.len() >= 1 {
+                                stack_data.pop().unwrap()
+                            } else {
+                                eprintln!("Runtime Error: Stack '{}' has no connection ID for cls", stack);
+                                return Ok(());
+                            }
+                        } else {
+                            eprintln!("Runtime Error: Stack '{}' not found", stack);
+                            return Ok(());
+                        }
+                    }; // stack_data 借用在此释放
+                    
+                    // 关闭连接
+                    if self.connections.remove(&conn_id).is_some() {
+                        // 连接已移除并自动关闭
+                    } else {
+                        eprintln!("Runtime Error: Connection '{}' not found", conn_id);
+                    }
+                }
             }
 
             // 执行后检查断点/单步暂停
@@ -434,6 +574,50 @@ impl QVM {
     /// 获取上次错误信息
     pub fn last_error(&self) -> Option<&str> {
         self.last_error.as_deref()
+    }
+
+    /// 创建新的 Socket 连接，返回连接句柄 ID
+    fn create_connection(&mut self, protocol: &str, address: &str, port: u16) -> Result<String, String> {
+        // 目前仅支持 TCP
+        if protocol != "tcp" && protocol != "TCP" {
+            return Err(format!("Unsupported protocol: {}. Only 'tcp' is supported.", protocol));
+        }
+        let addr = format!("{}:{}", address, port);
+        let stream = TcpStream::connect(addr.as_str())
+            .map_err(|e| format!("Failed to connect to {}: {}", addr, e))?;
+        
+        self.conn_counter += 1;
+        let conn_id = format!("conn_{}", self.conn_counter);
+        self.connections.insert(conn_id.clone(), stream);
+        Ok(conn_id)
+    }
+
+    /// 从栈顶获取连接句柄 ID，返回连接的可变引用
+    fn get_connection_mut(&mut self, _stack_name: &str, conn_id: &str) -> Result<&mut TcpStream, String> {
+        if let Some(conn) = self.connections.get_mut(conn_id) {
+            Ok(conn)
+        } else {
+            Err(format!("Socket connection '{}' not found", conn_id))
+        }
+    }
+
+    /// 移除并关闭指定连接
+    fn close_connection(&mut self, _stack_name: &str, conn_id: &str) -> Result<(), String> {
+        if let Some(_stream) = self.connections.remove(conn_id) {
+            // TcpStream drop 时会自动关闭
+            Ok(())
+        } else {
+            Err(format!("Socket connection '{}' not found", conn_id))
+        }
+    }
+}
+
+impl Drop for QVM {
+    fn drop(&mut self) {
+        // 自动关闭所有活跃连接
+        for (_id, stream) in self.connections.drain() {
+            let _ = stream.shutdown(Shutdown::Both);
+        }
     }
 }
 

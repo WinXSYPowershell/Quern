@@ -103,7 +103,7 @@ impl Parser {
 
     /// 判断一个token是否是指令关键字
     fn is_keyword(token: &str) -> bool {
-        matches!(token, "crt" | "psh" | "pop" | "out" | "otn" | "del" | "fnc" | "cal" | "jmp" | "host_call")
+        matches!(token, "crt" | "psh" | "pop" | "out" | "otn" | "del" | "fnc" | "cal" | "jmp" | "host_call" | "skt" | "snd" | "rcv" | "cls")
     }
 
     /// 解析函数体块，返回 (指令列表, 行号列表)
@@ -258,6 +258,41 @@ impl Parser {
                     block_instrs.push(Instruction::HostCall { module, func, args });
                     block_line_numbers.push(current_line);
                 }
+                "skt" => {
+                    self.consume("skt").map_err(|_| self.create_error("MissingArgument", 1001, &cmd).to_string())?;
+                    let stack_ref = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
+                    let protocol = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
+                    let address = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
+                    let port_str = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
+                    let port: u16 = port_str.parse().map_err(|_| {
+                        self.create_error("InvalidPortNumber", 1009, &port_str).to_string()
+                    })?;
+                    block_instrs.push(Instruction::Socket {
+                        stack: stack_ref,
+                        protocol,
+                        address,
+                        port,
+                    });
+                    block_line_numbers.push(current_line);
+                }
+                "snd" => {
+                    self.consume("snd").map_err(|_| self.create_error("MissingArgument", 1001, &cmd).to_string())?;
+                    let stack = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
+                    block_instrs.push(Instruction::Send { stack });
+                    block_line_numbers.push(current_line);
+                }
+                "rcv" => {
+                    self.consume("rcv").map_err(|_| self.create_error("MissingArgument", 1001, &cmd).to_string())?;
+                    let stack = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
+                    block_instrs.push(Instruction::Receive { stack });
+                    block_line_numbers.push(current_line);
+                }
+                "cls" => {
+                    self.consume("cls").map_err(|_| self.create_error("MissingArgument", 1001, &cmd).to_string())?;
+                    let stack = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
+                    block_instrs.push(Instruction::Close { stack });
+                    block_line_numbers.push(current_line);
+                }
                 _ => {
                     return Err(format!("Unknown command in block: {}", cmd));
                 }
@@ -409,6 +444,41 @@ impl Parser {
                     }
 
                     instructions.push(Instruction::HostCall { module, func, args });
+                    instruction_line_numbers.push(current_line);
+                }
+                "skt" => {
+                    self.consume("skt").map_err(|_| self.create_error("MissingArgument", 1001, &cmd))?;
+                    let stack_ref = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    let protocol = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    let address = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    let port_str = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    let port: u16 = port_str.parse().map_err(|_| {
+                        self.create_error("InvalidPortNumber", 1009, &port_str)
+                    })?;
+                    instructions.push(Instruction::Socket {
+                        stack: stack_ref,
+                        protocol,
+                        address,
+                        port,
+                    });
+                    instruction_line_numbers.push(current_line);
+                }
+                "snd" => {
+                    self.consume("snd").map_err(|_| self.create_error("MissingArgument", 1001, &cmd))?;
+                    let stack = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    instructions.push(Instruction::Send { stack });
+                    instruction_line_numbers.push(current_line);
+                }
+                "rcv" => {
+                    self.consume("rcv").map_err(|_| self.create_error("MissingArgument", 1001, &cmd))?;
+                    let stack = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    instructions.push(Instruction::Receive { stack });
+                    instruction_line_numbers.push(current_line);
+                }
+                "cls" => {
+                    self.consume("cls").map_err(|_| self.create_error("MissingArgument", 1001, &cmd))?;
+                    let stack = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    instructions.push(Instruction::Close { stack });
                     instruction_line_numbers.push(current_line);
                 }
                 _ => {
