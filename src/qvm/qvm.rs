@@ -78,6 +78,449 @@ impl HostRegistry {
     }
 }
 
+
+// ============================================================
+// 内存数据库实现
+// ============================================================
+
+/// 内存数据库表
+pub struct MemoryTable {
+    /// 表名
+    pub name: String,
+    /// 列名
+    pub columns: Vec<String>,
+    /// 数据行: 每行是 column_name -> value 的映射
+    pub rows: Vec<HashMap<String, String>>,
+}
+
+impl MemoryTable {
+    pub fn new(name: String, columns: Vec<String>) -> Self {
+        MemoryTable {
+            name,
+            columns,
+            rows: Vec::new(),
+        }
+    }
+
+    /// 插入一行数据
+    pub fn insert(&mut self, values: HashMap<String, String>) -> Result<(), String> {
+        // 检查所有列是否存在
+        for col in &self.columns {
+            if !values.contains_key(col) {
+                return Err(format!("Missing column: {}", col));
+            }
+        }
+        // 检查是否有额外的列
+        for val_col in values.keys() {
+            if !self.columns.contains(val_col) {
+                return Err(format!("Unknown column: {}", val_col));
+            }
+        }
+        self.rows.push(values);
+        Ok(())
+    }
+
+    /// 查询数据，支持简单条件过滤
+    pub fn query(&self, select_cols: &[String], condition: Option<&str>) -> Result<Vec<HashMap<String, String>>, String> {
+        let mut results = Vec::new();
+        
+        for row in &self.rows {
+            // 如果有条件，检查是否匹配
+            if let Some(cond) = condition {
+                if !self.evaluate_condition(row, cond)? {
+                    continue;
+                }
+            }
+            
+            // 选择列
+            let mut result_row = HashMap::new();
+            if select_cols.is_empty() {
+                // 选择所有列
+                for col in &self.columns {
+                    if let Some(val) = row.get(col) {
+                        result_row.insert(col.clone(), val.clone());
+                    }
+                }
+            } else {
+                for col in select_cols {
+                    if let Some(val) = row.get(col) {
+                        result_row.insert(col.clone(), val.clone());
+                    }
+                }
+            }
+            results.push(result_row);
+        }
+        
+        Ok(results)
+    }
+
+    /// 更新数据，支持条件
+    pub fn update(&mut self, updates: HashMap<String, String>, condition: Option<&str>) -> Result<usize, String> {
+        // 检查所有要更新的列是否存在
+        for col in updates.keys() {
+            if !self.columns.contains(col) {
+                return Err(format!("Unknown column: {}", col));
+            }
+        }
+        
+        // 如果有条件，先评估哪些行需要更新（避免借用冲突）
+        let mut matching_indices = Vec::new();
+        if let Some(cond) = condition {
+            for (i, row) in self.rows.iter().enumerate() {
+                if self.evaluate_condition(row, cond)? {
+                    matching_indices.push(i);
+                }
+            }
+        } else {
+            for i in 0..self.rows.len() {
+                matching_indices.push(i);
+            }
+        }
+        
+        let updated_count = matching_indices.len();
+        for i in matching_indices {
+            for (col, val) in &updates {
+                self.rows[i].insert(col.clone(), val.clone());
+            }
+        }
+        
+        Ok(updated_count)
+    }
+
+    /// 删除数据，支持条件
+    pub fn delete(&mut self, condition: Option<&str>) -> Result<usize, String> {
+        let initial_len = self.rows.len();
+        
+        if let Some(cond) = condition {
+            // 先收集要删除的索引（避免借用冲突）
+            let indices_to_remove: Vec<usize> = self.rows.iter().enumerate()
+                .filter(|(_, row)| self.evaluate_condition(row, cond).unwrap_or(false))
+                .map(|(i, _)| i)
+                .collect();
+            
+            // 从后往前删除，避免索引偏移
+            for i in indices_to_remove.into_iter().rev() {
+                self.rows.remove(i);
+            }
+        } else {
+            // 无条件删除所有行
+            self.rows.clear();
+        }
+        
+        Ok(initial_len - self.rows.len())
+    }
+
+    /// 评估条件表达式
+    fn evaluate_condition(&self, row: &HashMap<String, String>, condition: &str) -> Result<bool, String> {
+        // 支持的操作符: = != < > =< >=
+        let operators = ["!=", ">=", "<=", "=", ">", "<"];
+        
+        for op in &operators {
+            if let Some(pos) = condition.find(op) {
+                let left = condition[..pos].trim().to_string();
+                let right = condition[pos + op.len()..].trim().to_string();
+                
+                // 获取左值
+                let left_val = match row.get(&left) {
+                    Some(v) => v.clone(),
+                    None => return Err(format!("Column not found: {}", left)),
+                };
+                
+                // 获取右值（可能是列名或字面量）
+                let right_val = match row.get(&right) {
+                    Some(v) => v.clone(),
+                    None => right.clone(), // 当作字面量
+                };
+                
+                // 尝试数值比较
+                if let (Ok(l), Ok(r)) = (left_val.parse::<f64>(), right_val.parse::<f64>()) {
+                    return Ok(MemoryTable::compare_values(&l, &r, op));
+                }
+                
+                // 字符串比较
+                return Ok(MemoryTable::compare_values(&left_val, &right_val, op));
+            }
+        }
+        
+        Err(format!("Invalid condition: {}", condition))
+    }
+
+    fn compare_values<T: PartialOrd>(left: &T, right: &T, op: &str) -> bool {
+        match op {
+            "=" => left == right,
+            "!=" => left != right,
+            "<" => left < right,
+            ">" => left > right,
+            "<=" => left <= right,
+            ">=" => left >= right,
+            _ => false,
+        }
+    }
+
+    /// 评估条件行(供外部调用)
+    pub fn eval_cond_row(&self, row: &HashMap<String, String>, condition: &str) -> bool {
+        self.evaluate_condition(row, condition).unwrap_or(false)
+    }
+}
+
+/// 内存数据库
+pub struct MemoryDatabase {
+    /// 已打开的数据库名
+    pub current_db: Option<String>,
+    /// 表集合
+    pub tables: HashMap<String, MemoryTable>,
+}
+
+impl MemoryDatabase {
+    pub fn new() -> Self {
+        MemoryDatabase {
+            current_db: None,
+            tables: HashMap::new(),
+        }
+    }
+
+    /// 连接数据库
+    pub fn connect(&mut self, name: &str) -> String {
+        self.current_db = Some(name.to_string());
+        format!("Connected to database: {}", name)
+    }
+
+    /// 创建表
+    pub fn create_table(&mut self, name: &str, columns_str: &str) -> Result<String, String> {
+        if self.current_db.is_none() {
+            return Err("No database connected. Use Database.connect first.".to_string());
+        }
+        
+        let columns: Vec<String> = columns_str.split(',').map(|s| s.trim().to_string()).collect();
+        
+        if columns.is_empty() {
+            return Err("Columns cannot be empty".to_string());
+        }
+        
+        if self.tables.contains_key(name) {
+            return Err(format!("Table '{}' already exists", name));
+        }
+        
+        self.tables.insert(name.to_string(), MemoryTable::new(name.to_string(), columns));
+        Ok(format!("Table '{}' created successfully", name))
+    }
+
+    /// 插入数据
+    pub fn insert(&mut self, table_name: &str, values_str: &str) -> Result<String, String> {
+        if self.current_db.is_none() {
+            return Err("No database connected. Use Database.connect first.".to_string());
+        }
+        
+        let table = self.tables.get_mut(table_name);
+        match table {
+            Some(t) => {
+                // 解析 key=value 或 key:value 对
+                let mut values = HashMap::new();
+                for pair in values_str.split(',') {
+                    let parts: Vec<&str> = if pair.contains('=') {
+                        pair.splitn(2, '=').collect()
+                    } else if pair.contains(':') {
+                        pair.splitn(2, ':').collect()
+                    } else {
+                        return Err(format!("Invalid value pair: {}", pair));
+                    };
+                    if parts.len() != 2 {
+                        return Err(format!("Invalid value pair: {}", pair));
+                    }
+                    values.insert(parts[0].trim().to_string(), parts[1].trim().to_string());
+                }
+                
+                t.insert(values)?;
+                Ok(format!("1 row inserted into '{}'", table_name))
+            }
+            None => Err(format!("Table '{}' not found", table_name)),
+        }
+    }
+
+    /// 查询数据
+    pub fn query(&self, table_name: &str, select_cols: &str, condition: Option<&str>) -> Result<String, String> {
+        if self.current_db.is_none() {
+            return Err("No database connected. Use Database.connect first.".to_string());
+        }
+        
+        let table = self.tables.get(table_name);
+        match table {
+            Some(t) => {
+                // 解析列名: * 表示所有列, 空字符串也表示所有列
+                let cols: Vec<String> = {
+                    let trimmed = select_cols.trim();
+                    if trimmed.is_empty() || trimmed == "*" || trimmed == "*,*" || trimmed == "*," {
+                        // 选择所有列
+                        t.columns.clone()
+                    } else {
+                        trimmed.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
+                    }
+                };
+                
+                let results = t.query(&cols, condition)?;
+                
+                // 格式化为可读字符串
+                if results.is_empty() {
+                    return Ok("Query returned 0 rows".to_string());
+                }
+                
+                let mut output = String::new();
+                for (i, row) in results.iter().enumerate() {
+                    if i > 0 {
+                        output.push('|');
+                    }
+                    let mut first = true;
+                    // 按表列顺序输出
+                    for col in &t.columns {
+                        if let Some(val) = row.get(col) {
+                            if !first {
+                                output.push(',');
+                            }
+                            output.push_str(val);
+                            first = false;
+                        }
+                    }
+                    output.push('\n');
+                }
+                
+                Ok(format!("Query returned {} rows:\n{}", results.len(), output))
+            }
+            None => Err(format!("Table '{}' not found", table_name)),
+        }
+    }
+
+    /// 更新数据
+    pub fn update(&mut self, table_name: &str, updates_str: &str, condition: Option<&str>) -> Result<String, String> {
+        if self.current_db.is_none() {
+            return Err("No database connected. Use Database.connect first.".to_string());
+        }
+        
+        let table = self.tables.get_mut(table_name);
+        match table {
+            Some(t) => {
+                // 解析 key=value 或 key:value 对
+                let mut values = HashMap::new();
+                for pair in updates_str.split(',') {
+                    let parts: Vec<&str> = if pair.contains('=') {
+                        pair.splitn(2, '=').collect()
+                    } else if pair.contains(':') {
+                        pair.splitn(2, ':').collect()
+                    } else {
+                        return Err(format!("Invalid update pair: {}", pair));
+                    };
+                    if parts.len() != 2 {
+                        return Err(format!("Invalid update pair: {}", pair));
+                    }
+                    values.insert(parts[0].trim().to_string(), parts[1].trim().to_string());
+                }
+                
+                // 逐行更新以支持算术操作 (如 salary:+500)
+                let matching_indices: Vec<usize> = if let Some(cond) = condition {
+                    t.rows.iter()
+                        .enumerate()
+                        .filter(|(_, row)| t.eval_cond_row(row, cond))
+                        .map(|(i, _)| i)
+                        .collect()
+                } else {
+                    (0..t.rows.len()).collect()
+                };
+                
+                for idx in &matching_indices {
+                    for (col, val) in &values {
+                        if val.starts_with('+') || val.starts_with('-') || val.starts_with('*') || val.starts_with('/') {
+                            let op_char = val.chars().next().unwrap();
+                            let num_str = &val[1..];
+                            if let Some(cur) = t.rows[*idx].get(col) {
+                                if let (Ok(cv), Ok(n)) = (cur.parse::<f64>(), num_str.parse::<f64>()) {
+                                    let r = match op_char {
+                                        '+' => cv + n,
+                                        '-' => cv - n,
+                                        '*' => cv * n,
+                                        '/' => if n == 0.0 { cv } else { cv / n },
+                                        _ => cv,
+                                    };
+                                    t.rows[*idx].insert(col.clone(), format!("{}", r));
+                                    continue;
+                                }
+                            }
+                        }
+                        t.rows[*idx].insert(col.clone(), val.clone());
+                    }
+                }
+                
+                Ok(format!("{} rows updated in '{}'", matching_indices.len(), table_name))
+            }
+            None => Err(format!("Table '{}' not found", table_name)),
+        }
+    }
+
+    /// 删除数据
+    pub fn delete(&mut self, table_name: &str, condition: Option<&str>) -> Result<String, String> {
+        if self.current_db.is_none() {
+            return Err("No database connected. Use Database.connect first.".to_string());
+        }
+        
+        let table = self.tables.get_mut(table_name);
+        match table {
+            Some(t) => {
+                let count = t.delete(condition)?;
+                Ok(format!("{} rows deleted from '{}'", count, table_name))
+            }
+            None => Err(format!("Table '{}' not found", table_name)),
+        }
+    }
+
+    /// 执行SQL风格的命令
+    pub fn execute(&mut self, command: &str) -> Result<String, String> {
+        let cmd_upper = command.trim().to_uppercase();
+        
+        if cmd_upper.starts_with("SELECT") {
+            // 简单解析 SELECT
+            // 格式: SELECT col1,col2 FROM table WHERE condition
+            let cmd = command.trim();
+            if cmd_upper.starts_with("SELECT *") || cmd_upper.starts_with("SELECT ") {
+                // 提取列名
+                let from_pos = cmd.find("FROM").unwrap_or(cmd.len());
+                let select_part = cmd[6..from_pos].trim();
+                
+                let rest = &cmd[from_pos..];
+                let table_start = rest.find("FROM").unwrap() + 4;
+                let table_end = rest[table_start..].find(|c: char| c.is_whitespace() || c == 'W').unwrap_or(rest.len() - table_start);
+                let table_name = rest[table_start..table_start + table_end].trim().to_string();
+                
+                // 检查是否有 WHERE
+                let condition = if let Some(where_pos) = rest[table_start + table_end..].find("WHERE") {
+                    Some(rest[table_start + table_end + where_pos + 5..].trim().to_string())
+                } else {
+                    None
+                };
+                
+                return self.query(&table_name, select_part, condition.as_deref());
+            }
+        }
+        
+        Err(format!("Unsupported command: {}. Use Database.connect/query/insert/update/delete instead.", command))
+    }
+
+    /// 关闭数据库
+    pub fn close(&mut self) -> String {
+        self.current_db = None;
+        self.tables.clear();
+        "Database closed".to_string()
+    }
+
+    /// 列出所有表
+    pub fn list_tables(&self) -> String {
+        let mut tables: Vec<&str> = self.tables.keys().map(|s| s.as_str()).collect();
+        tables.sort();
+        if tables.is_empty() {
+            "No tables".to_string()
+        } else {
+            format!("Tables: {}", tables.join(", "))
+        }
+    }
+}
+
 // ============================================================
 // QVM 虚拟机实现
 // ============================================================
@@ -85,6 +528,7 @@ impl HostRegistry {
 pub struct QVM {
     stacks: HashMap<String, Vec<String>>,
     host_registry: HostRegistry,
+    db: MemoryDatabase,
     last_error: Option<String>,
     /// 调试器配置
     debug_config: DebugConfig,
@@ -103,6 +547,7 @@ impl QVM {
         QVM {
             stacks: HashMap::new(),
             host_registry: HostRegistry::new(),
+            db: MemoryDatabase::new(),
             last_error: None,
             debug_config: DebugConfig::new(),
             current_instruction_idx: 0,
@@ -372,15 +817,101 @@ impl QVM {
                     }
                 }
                 // ============================================================
-                // HostCall 指令执行：调用C++侧注册的宿主函数
+                // HostCall 指令执行：调用C++侧注册的宿主函数 或 内置数据库操作
                 // ============================================================
                 Instruction::HostCall { module, func, args } => {
-                    match self.host_registry.call_function(module, func, args) {
-                        Ok(result) => {
-                            println!("[HostCall: {}.{}] {}", module, func, result);
+                    // 内置数据库操作
+                    if module == "Database" {
+                        match func.as_str() {
+                            "connect" => {
+                                if args.is_empty() {
+                                    eprintln!("[HostCall Error] Database.connect requires a database name");
+                                } else {
+                                    let result = self.db.connect(&args[0]);
+                                    println!("[HostCall: Database.{}] {}", func, result);
+                                }
+                            }
+                            "create_table" => {
+                                if args.len() < 2 {
+                                    eprintln!("[HostCall Error] Database.create_table requires table_name and columns");
+                                } else {
+                                    match self.db.create_table(&args[0], &args[1]) {
+                                        Ok(result) => println!("[HostCall: Database.{}] {}", func, result),
+                                        Err(e) => eprintln!("[HostCall Error] Database.create_table: {}", e),
+                                    }
+                                }
+                            }
+                            "insert" => {
+                                if args.len() < 2 {
+                                    eprintln!("[HostCall Error] Database.insert requires table_name and values");
+                                } else {
+                                    match self.db.insert(&args[0], &args[1]) {
+                                        Ok(result) => println!("[HostCall: Database.{}] {}", func, result),
+                                        Err(e) => eprintln!("[HostCall Error] Database.insert: {}", e),
+                                    }
+                                }
+                            }
+                            "query" => {
+                                if args.len() < 2 {
+                                    eprintln!("[HostCall Error] Database.query requires table_name and select_columns");
+                                } else {
+                                    let condition = if args.len() > 2 { Some(&args[2][..]) } else { None };
+                                    match self.db.query(&args[0], &args[1], condition) {
+                                        Ok(result) => println!("[HostCall: Database.{}] {}", func, result),
+                                        Err(e) => eprintln!("[HostCall Error] Database.query: {}", e),
+                                    }
+                                }
+                            }
+                            "update" => {
+                                if args.len() < 2 {
+                                    eprintln!("[HostCall Error] Database.update requires table_name and updates");
+                                } else {
+                                    let condition = if args.len() > 2 { Some(&args[2][..]) } else { None };
+                                    match self.db.update(&args[0], &args[1], condition) {
+                                        Ok(result) => println!("[HostCall: Database.{}] {}", func, result),
+                                        Err(e) => eprintln!("[HostCall Error] Database.update: {}", e),
+                                    }
+                                }
+                            }
+                            "delete" => {
+                                if args.is_empty() {
+                                    eprintln!("[HostCall Error] Database.delete requires table_name");
+                                } else {
+                                    let condition = if args.len() > 1 { Some(&args[1][..]) } else { None };
+                                    match self.db.delete(&args[0], condition) {
+                                        Ok(result) => println!("[HostCall: Database.{}] {}", func, result),
+                                        Err(e) => eprintln!("[HostCall Error] Database.delete: {}", e),
+                                    }
+                                }
+                            }
+                            "list_tables" => {
+                                let result = self.db.list_tables();
+                                println!("[HostCall: Database.{}] {}", func, result);
+                            }
+                            "close" => {
+                                let result = self.db.close();
+                                println!("[HostCall: Database.{}] {}", func, result);
+                            }
+                            _ => {
+                                match self.host_registry.call_function(module, func, args) {
+                                    Ok(result) => {
+                                        println!("[HostCall: {}.{}] {}", module, func, result);
+                                    }
+                                    Err(e) => {
+                                        eprintln!("[HostCall Error] Database.{}: {}", func, e);
+                                    }
+                                }
+                            }
                         }
-                        Err(e) => {
-                            eprintln!("[HostCall Error] {}: {}", module, e);
+                    } else {
+                        // 普通宿主函数调用
+                        match self.host_registry.call_function(module, func, args) {
+                            Ok(result) => {
+                                println!("[HostCall: {}.{}] {}", module, func, result);
+                            }
+                            Err(e) => {
+                                eprintln!("[HostCall Error] {}: {}", module, e);
+                            }
                         }
                     }
                 }
@@ -440,7 +971,7 @@ impl QVM {
                         eprintln!("Runtime Error: Send failed: {}", e);
                     } else {
                         // 尝试刷新缓冲区
-                        if let Some(mut stream) = self.connections.get_mut(&conn_id) {
+                        if let Some(stream) = self.connections.get_mut(&conn_id) {
                             let _ = stream.flush();
                         }
                     }
@@ -465,7 +996,7 @@ impl QVM {
                     
                     // 接收数据
                     let received = {
-                        if let Some(mut stream) = self.connections.get_mut(&conn_id) {
+                        if let Some(stream) = self.connections.get_mut(&conn_id) {
                             use std::io::Read;
                             let mut buf = [0u8; 4096];
                             match stream.read(&mut buf) {

@@ -24,6 +24,13 @@ impl Parser {
 
         for (line_idx, line) in input.lines().enumerate() {
             let line_num = line_idx + 1;
+            
+            // Skip comment lines (lines starting with //)
+            let trimmed = line.trim();
+            if trimmed.starts_with("//") {
+                continue;
+            }
+            
             let mut current_token = String::new();
             let mut in_quotes = false;
 
