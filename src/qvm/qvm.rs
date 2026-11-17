@@ -1,3 +1,4 @@
+use std::env;
 use std::collections::HashMap;
 use std::fs;
 use std::sync::Mutex;
@@ -820,8 +821,53 @@ impl QVM {
                 // HostCall 指令执行：调用C++侧注册的宿主函数 或 内置数据库操作
                 // ============================================================
                 Instruction::HostCall { module, func, args } => {
+                    // 内置 Env 环境变量模块
+                    if module == "Env" {
+                        match func.as_str() {
+                            "get" => {
+                                if args.is_empty() {
+                                    eprintln!("[HostCall Error] Env.get requires a variable name");
+                                } else {
+                                    match env::var(&args[0]) {
+                                        Ok(val) => println!("[HostCall: Env.{}] {}", func, val),
+                                        Err(e) => eprintln!("[HostCall Error] Env.get {}: {}", args[0], e),
+                                    }
+                                }
+                            }
+                            "set" => {
+                                if args.len() < 2 {
+                                    eprintln!("[HostCall Error] Env.set requires variable name and value");
+                                } else {
+                                    env::set_var(&args[0], &args[1]);
+                                    println!("[HostCall: Env.{}] Set {}={}", func, args[0], args[1]);
+                                }
+                            }
+                            "unset" => {
+                                if args.is_empty() {
+                                    eprintln!("[HostCall Error] Env.unset requires a variable name");
+                                } else {
+                                    env::remove_var(&args[0]);
+                                    println!("[HostCall: Env.{}] Unset {}", func, args[0]);
+                                }
+                            }
+                            "list" => {
+                                let mut vars: Vec<_> = env::vars().collect();
+                                vars.sort_by_key(|(k, _)| k.clone());
+                                if vars.is_empty() {
+                                    println!("[HostCall: Env.list] (no environment variables)");
+                                } else {
+                                    for (key, val) in vars {
+                                        println!("[HostCall: Env.list] {}={}", key, val);
+                                    }
+                                }
+                            }
+                            _ => {
+                                eprintln!("[HostCall Error] Unknown Env function: {}", func);
+                                eprintln!("Available Env functions: get, set, unset, list");
+                            }
+                        }
+                    } else if module == "Database" {
                     // 内置数据库操作
-                    if module == "Database" {
                         match func.as_str() {
                             "connect" => {
                                 if args.is_empty() {

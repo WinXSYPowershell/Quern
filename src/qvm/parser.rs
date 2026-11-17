@@ -110,7 +110,7 @@ impl Parser {
 
     /// 判断一个token是否是指令关键字
     fn is_keyword(token: &str) -> bool {
-        matches!(token, "crt" | "psh" | "pop" | "out" | "otn" | "del" | "fnc" | "cal" | "jmp" | "host_call" | "skt" | "snd" | "rcv" | "cls")
+        matches!(token, "crt" | "psh" | "pop" | "out" | "otn" | "del" | "fnc" | "cal" | "jmp" | "hcl" | "skt" | "snd" | "rcv" | "cls")
     }
 
     /// 解析函数体块，返回 (指令列表, 行号列表)
@@ -242,13 +242,13 @@ impl Parser {
                     });
                     block_line_numbers.push(current_line);
                 }
-                "host_call" => {
-                    self.consume("host_call").map_err(|_| self.create_error("MissingArgument", 1001, &cmd).to_string())?;
+                "hcl" => {
+                    self.consume("hcl").map_err(|_| self.create_error("MissingArgument", 1001, &cmd).to_string())?;
                     let module_func = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
 
                     let parts: Vec<&str> = module_func.splitn(2, '.').collect();
                     if parts.len() != 2 {
-                        return Err(format!("Invalid host_call syntax: {}", module_func));
+                        return Err(format!("Invalid hcl syntax: {}", module_func));
                     }
                     let module = parts[0].to_string();
                     let func = parts[1].to_string();
@@ -430,8 +430,8 @@ impl Parser {
                     });
                     instruction_line_numbers.push(current_line);
                 }
-                "host_call" => {
-                    self.consume("host_call").map_err(|_| self.create_error("MissingArgument", 1001, &cmd))?;
+                "hcl" => {
+                    self.consume("hcl").map_err(|_| self.create_error("MissingArgument", 1001, &cmd))?;
                     let module_func = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
 
                     let parts: Vec<&str> = module_func.splitn(2, '.').collect();

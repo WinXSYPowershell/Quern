@@ -66,7 +66,7 @@ pub enum Instruction {
         op: ComparisonOp, 
         target_func: String,
     },
-    // --- Host API: host_call <Module>.<Func> <Args...> ---
+    // --- Host API: hcl <Module>.<Func> <Args...> ---
     HostCall {
         module: String,
         func: String,
