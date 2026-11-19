@@ -1094,6 +1094,10 @@ impl QVM {
                         eprintln!("Runtime Error: Connection '{}' not found", conn_id);
                     }
                 }
+                Instruction::GuiCreate { title, widgets } => {
+                    // 调用 GUI 引擎渲染窗口（阻塞直到窗口关闭）
+                    crate::gui_engine::run_gui_window(title.clone(), widgets.clone(), &mut self.stacks);
+                }
             }
 
             // 执行后检查断点/单步暂停

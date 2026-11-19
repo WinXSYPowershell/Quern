@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use crate::errors::SyntaxError;
-use crate::instructions::{Instruction, Program, ArithmeticOp, ComparisonOp};
+use crate::instructions::{Instruction, Program, ArithmeticOp, ComparisonOp, GuiWidget};
 
 // --- Parser Implementation ---
 
@@ -110,7 +110,65 @@ impl Parser {
 
     /// 判断一个token是否是指令关键字
     fn is_keyword(token: &str) -> bool {
-        matches!(token, "crt" | "psh" | "pop" | "out" | "otn" | "del" | "fnc" | "cal" | "jmp" | "hcl" | "skt" | "snd" | "rcv" | "cls")
+        matches!(token, "crt" | "psh" | "pop" | "out" | "otn" | "del" | "fnc" | "cal" | "jmp" | "hcl" | "skt" | "snd" | "rcv" | "cls" | "gui")
+    }
+
+    /// 解析 GUI 窗口块：tit/lbl/btn/txt 等控件命令
+    /// 返回 (标题, 控件列表)
+    fn parse_gui_block(&mut self) -> Result<(String, Vec<GuiWidget>), String> {
+        let mut title = String::from("Quern Window");
+        let mut widgets = Vec::new();
+
+        while self.pos < self.tokens.len() {
+            let cmd = self.tokens[self.pos].clone();
+            let _current_line = self.line_map[self.pos];
+
+            if cmd == "}" {
+                self.pos += 1;
+                return Ok((title, widgets));
+            }
+
+            match cmd.as_str() {
+                "tit" => {
+                    self.consume("tit")?;
+                    let title_val = self.next_arg()?;
+                    title = title_val;
+                }
+                "lbl" => {
+                    self.consume("lbl")?;
+                    let text = self.next_arg()?;
+                    widgets.push(GuiWidget::Label { text });
+                }
+                "btn" => {
+                    self.consume("btn")?;
+                    let label = self.next_arg()?;
+                    let var_ref = self.next_arg()?;
+                    // 提取变量名: @var@ -> var
+                    let var_name = if Self::is_variable(&var_ref) {
+                        var_ref[1..var_ref.len()-1].to_string()
+                    } else {
+                        var_ref
+                    };
+                    widgets.push(GuiWidget::Button { label, var_name });
+                }
+                "txt" => {
+                    self.consume("txt")?;
+                    let placeholder = self.next_arg()?;
+                    let var_ref = self.next_arg()?;
+                    let var_name = if Self::is_variable(&var_ref) {
+                        var_ref[1..var_ref.len()-1].to_string()
+                    } else {
+                        var_ref
+                    };
+                    widgets.push(GuiWidget::TextInput { placeholder, var_name });
+                }
+                _ => {
+                    return Err(format!("Unknown GUI command: {}", cmd));
+                }
+            }
+        }
+
+        Err("Unmatched braces in GUI block: expected '}'".to_string())
     }
 
     /// 解析函数体块，返回 (指令列表, 行号列表)
@@ -320,6 +378,22 @@ impl Parser {
             let current_line = self.line_map[self.pos];
 
             match cmd.as_str() {
+                // ============================================================
+                // GUI 指令：gui crt wdw{ ... }
+                // ============================================================
+                "gui" => {
+                    self.consume("gui").map_err(|_| self.create_error("MissingArgument", 1001, &cmd))?;
+                    self.consume("crt").map_err(|_| self.create_error("MissingArgument", 1001, &cmd))?;
+                    let wdw_name = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    // wdw_name 应该是 "wdw"，但可以扩展支持多个窗口名
+                    if wdw_name != "wdw" {
+                        return Err(self.create_error("ExpectedWdwKeyword", 1010, &wdw_name));
+                    }
+                    self.expect("{").map_err(|_| self.create_error("MissingBrace", 1004, &cmd))?;
+                    let (title, widgets) = self.parse_gui_block().map_err(|e| self.create_error("GuiBlockParseError", 1011, &e))?;
+                    instructions.push(Instruction::GuiCreate { title, widgets });
+                    instruction_line_numbers.push(current_line);
+                }
                 "crt" => {
                     self.consume("crt").map_err(|_| self.create_error("MissingArgument", 1001, &cmd))?;
                     let name = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;

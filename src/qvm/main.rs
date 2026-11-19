@@ -6,6 +6,7 @@ mod errors;
 mod instructions;
 mod qvm;
 mod parser;
+mod gui_engine;
 
 use qvm::QVM;
 use parser::Parser;

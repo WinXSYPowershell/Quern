@@ -46,6 +46,24 @@ impl ArithmeticOp {
     }
 }
 
+// ============================================================
+// GUI 控件类型
+// ============================================================
+
+#[derive(Debug, Clone)]
+pub enum GuiWidget {
+    /// 标签控件：显示纯文本
+    Label { text: String },
+    /// 按钮控件：点击后状态存入变量
+    Button { label: String, var_name: String },
+    /// 文本输入控件：用户输入内容存入变量
+    TextInput { placeholder: String, var_name: String },
+}
+
+// ============================================================
+// QB 指令枚举
+// ============================================================
+
 #[derive(Debug, Clone)]
 pub enum Instruction {
     CreateStack(String),
@@ -88,7 +106,11 @@ pub enum Instruction {
     Close {
         stack: String,
     },
-
+    // --- GUI 指令：在 QB 脚本内创建 GUI 窗口 ---
+    GuiCreate {
+        title: String,
+        widgets: Vec<GuiWidget>,
+    },
 }
 
 // ============================================================
