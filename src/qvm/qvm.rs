@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::sync::Mutex;
 use crate::instructions::{Instruction, Program, ArithmeticOp, ComparisonOp, DebugConfig};
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::net::{TcpStream, Shutdown};
 
 // ============================================================
@@ -1097,6 +1097,40 @@ impl QVM {
                 Instruction::GuiCreate { title, widgets } => {
                     // 调用 GUI 引擎渲染窗口（阻塞直到窗口关闭）
                     crate::gui_engine::run_gui_window(title.clone(), widgets.clone(), &mut self.stacks);
+                }
+                Instruction::Pipe { source, stack } => {
+                    // pip <source> <stack>
+                    // source: "all" 表示按行读取所有 stdin 内容并逐行压入栈
+                    // source: "type" 表示将整个 stdin 作为一段文本压入栈
+                    let mut input = String::new();
+                    if let Err(e) = io::stdin().read_to_string(&mut input) {
+                        eprintln!("Runtime Error: Failed to read from stdin: {}", e);
+                    } else {
+                        match source.as_str() {
+                            "all" => {
+                                // 按行分割，每行作为一个元素压入栈
+                                for line in input.lines() {
+                                    let line = line.to_string();
+                                    if let Some(stack_data) = self.stacks.get_mut(stack) {
+                                        stack_data.push(line);
+                                    } else {
+                                        eprintln!("Runtime Error: Stack '{}' not found", stack);
+                                    }
+                                }
+                            }
+                            "type" => {
+                                // 将整个 stdin 内容作为一段文本压入栈
+                                if let Some(stack_data) = self.stacks.get_mut(stack) {
+                                    stack_data.push(input);
+                                } else {
+                                    eprintln!("Runtime Error: Stack '{}' not found", stack);
+                                }
+                            }
+                            _ => {
+                                eprintln!("Runtime Error: Unknown pipe source '{}'. Use 'all' or 'type'.", source);
+                            }
+                        }
+                    }
                 }
             }
 

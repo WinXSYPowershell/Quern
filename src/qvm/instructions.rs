@@ -111,6 +111,12 @@ pub enum Instruction {
         title: String,
         widgets: Vec<GuiWidget>,
     },
+    // --- 管道指令：从 stdin 读取内容并压入栈 ---
+    /// source: "all" 表示按行读取所有 stdin 内容，"type" 表示将整个 stdin 作为一段文本
+    Pipe {
+        source: String,
+        stack: String,
+    },
 }
 
 // ============================================================

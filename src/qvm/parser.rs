@@ -110,7 +110,7 @@ impl Parser {
 
     /// 判断一个token是否是指令关键字
     fn is_keyword(token: &str) -> bool {
-        matches!(token, "crt" | "psh" | "pop" | "out" | "otn" | "del" | "fnc" | "cal" | "jmp" | "hcl" | "skt" | "snd" | "rcv" | "cls" | "gui")
+        matches!(token, "crt" | "psh" | "pop" | "out" | "otn" | "del" | "fnc" | "cal" | "jmp" | "hcl" | "skt" | "snd" | "rcv" | "cls" | "gui" | "pip")
     }
 
     /// 解析 GUI 窗口块：tit/lbl/btn/txt 等控件命令
@@ -358,6 +358,13 @@ impl Parser {
                     block_instrs.push(Instruction::Close { stack });
                     block_line_numbers.push(current_line);
                 }
+                "pip" => {
+                    self.consume("pip").map_err(|_| self.create_error("MissingArgument", 1001, &cmd).to_string())?;
+                    let source = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
+                    let stack = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
+                    block_instrs.push(Instruction::Pipe { source, stack });
+                    block_line_numbers.push(current_line);
+                }
                 _ => {
                     return Err(format!("Unknown command in block: {}", cmd));
                 }
@@ -560,6 +567,13 @@ impl Parser {
                     self.consume("cls").map_err(|_| self.create_error("MissingArgument", 1001, &cmd))?;
                     let stack = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
                     instructions.push(Instruction::Close { stack });
+                    instruction_line_numbers.push(current_line);
+                }
+                "pip" => {
+                    self.consume("pip").map_err(|_| self.create_error("MissingArgument", 1001, &cmd))?;
+                    let source = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    let stack = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    instructions.push(Instruction::Pipe { source, stack });
                     instruction_line_numbers.push(current_line);
                 }
                 _ => {
