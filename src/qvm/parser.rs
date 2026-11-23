@@ -110,7 +110,7 @@ impl Parser {
 
     /// 判断一个token是否是指令关键字
     fn is_keyword(token: &str) -> bool {
-        matches!(token, "crt" | "psh" | "pop" | "out" | "otn" | "del" | "fnc" | "cal" | "jmp" | "hcl" | "skt" | "snd" | "rcv" | "cls" | "gui" | "pip")
+        matches!(token, "crt" | "psh" | "pop" | "out" | "otn" | "del" | "fnc" | "cal" | "jmp" | "hcl" | "skt" | "snd" | "rcv" | "cls" | "gui" | "pip" | "inp")
     }
 
     /// 解析 GUI 窗口块：tit/lbl/btn/txt 等控件命令
@@ -365,6 +365,26 @@ impl Parser {
                     block_instrs.push(Instruction::Pipe { source, stack });
                     block_line_numbers.push(current_line);
                 }
+                // === inp 指令解析（函数体内） ===
+                "inp" => {
+                    self.consume("inp").map_err(|_| self.create_error("MissingArgument", 1001, &cmd).to_string())?;
+                    // 读取提示源：@变量@ 或 "字面量字符串"
+                    let prompt_token = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
+                    let prompt_is_var = Self::is_variable(&prompt_token);
+                    let prompt_content = if prompt_is_var {
+                        prompt_token[1..prompt_token.len()-1].to_string()
+                    } else {
+                        // 去掉引号
+                        prompt_token.trim_matches('"').to_string()
+                    };
+                    // 读取目标栈名
+                    let stack = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
+                    block_instrs.push(Instruction::Input {
+                        prompt_source: (prompt_content, prompt_is_var),
+                        stack,
+                    });
+                    block_line_numbers.push(current_line);
+                }
                 _ => {
                     return Err(format!("Unknown command in block: {}", cmd));
                 }
@@ -574,6 +594,26 @@ impl Parser {
                     let source = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
                     let stack = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
                     instructions.push(Instruction::Pipe { source, stack });
+                    instruction_line_numbers.push(current_line);
+                }
+                // === inp 指令解析（顶层） ===
+                "inp" => {
+                    self.consume("inp").map_err(|_| self.create_error("MissingArgument", 1001, &cmd))?;
+                    // 读取提示源：@变量@ 或 "字面量字符串"
+                    let prompt_token = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    let prompt_is_var = Self::is_variable(&prompt_token);
+                    let prompt_content = if prompt_is_var {
+                        prompt_token[1..prompt_token.len()-1].to_string()
+                    } else {
+                        // 去掉引号
+                        prompt_token.trim_matches('"').to_string()
+                    };
+                    // 读取目标栈名
+                    let stack = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    instructions.push(Instruction::Input {
+                        prompt_source: (prompt_content, prompt_is_var),
+                        stack,
+                    });
                     instruction_line_numbers.push(current_line);
                 }
                 _ => {

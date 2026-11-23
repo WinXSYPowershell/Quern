@@ -117,6 +117,13 @@ pub enum Instruction {
         source: String,
         stack: String,
     },
+    // --- 等待用户输入指令 ---
+    /// prompt_source: (提示内容, 是否为变量引用) — 若为变量引用则从对应栈获取提示文本
+    /// stack: 目标栈名，用户输入的内容将压入此栈
+    Input {
+        prompt_source: (String, bool),
+        stack: String,
+    },
 }
 
 // ============================================================

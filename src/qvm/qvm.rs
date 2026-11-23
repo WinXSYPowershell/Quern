@@ -1132,6 +1132,41 @@ impl QVM {
                         }
                     }
                 }
+                // === Input 指令执行：等待用户输入 ===
+                Instruction::Input { prompt_source, stack } => {
+                    // 确定提示文本
+                    let prompt_text = if prompt_source.1 {
+                        // 是变量引用，从对应栈获取提示文本
+                        if let Some(var_value) = self.get_stack_top(&prompt_source.0) {
+                            var_value
+                        } else {
+                            eprintln!("Warning: Variable '{}' not found for inp prompt, using empty prompt.", prompt_source.0);
+                            String::new()
+                        }
+                    } else {
+                        // 是字面量字符串
+                        prompt_source.0.clone()
+                    };
+
+                    // 打印提示（不换行）
+                    print!("{}", prompt_text);
+                    std::io::stdout().flush().unwrap();
+
+                    // 读取用户输入
+                    let mut input = String::new();
+                    if let Err(e) = std::io::stdin().read_line(&mut input) {
+                        eprintln!("Runtime Error: Failed to read input: {}", e);
+                    } else {
+                        // 去除末尾换行符
+                        let input = input.trim_end_matches(&['\n', '\r'][..]).to_string();
+                        // 压入指定栈
+                        if let Some(stack_data) = self.stacks.get_mut(stack) {
+                            stack_data.push(input);
+                        } else {
+                            eprintln!("Runtime Error: Stack '{}' not found", stack);
+                        }
+                    }
+                }
             }
 
             // 执行后检查断点/单步暂停
