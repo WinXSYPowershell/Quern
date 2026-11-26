@@ -541,6 +541,8 @@ pub struct QVM {
     connections: HashMap<String, TcpStream>,
     /// 连接句柄计数器
     conn_counter: u64,
+    /// 命令行传入的程序参数（通过 -- 分隔符传递）
+    program_args: Vec<String>,
 }
 
 impl QVM {
@@ -555,12 +557,18 @@ impl QVM {
             current_function: None,
             connections: HashMap::new(),
             conn_counter: 0,
+            program_args: Vec::new(),
         }
     }
 
     /// 设置调试器配置
     pub fn set_debug_config(&mut self, config: DebugConfig) {
         self.debug_config = config;
+    }
+
+    /// 设置命令行传入的程序参数
+    pub fn set_program_args(&mut self, args: Vec<String>) {
+        self.program_args = args;
     }
 
     /// 获取宿主注册表引用（供C++侧注册函数/变量）
@@ -1165,6 +1173,22 @@ impl QVM {
                         } else {
                             eprintln!("Runtime Error: Stack '{}' not found", stack);
                         }
+                    }
+                }
+                // ============================================================
+                // Arg 指令执行：将程序参数压入指定栈
+                // ============================================================
+                Instruction::Arg(stack_name) => {
+                    // 将命令行传入的程序参数逐个压入指定栈
+                    for arg in &self.program_args {
+                        if let Some(stack_data) = self.stacks.get_mut(stack_name) {
+                            stack_data.push(arg.clone());
+                        } else {
+                            eprintln!("Runtime Error: Stack '{}' not found", stack_name);
+                        }
+                    }
+                    if self.program_args.is_empty() {
+                        eprintln!("Warning: No program arguments provided (use '--' to separate program args)");
                     }
                 }
             }

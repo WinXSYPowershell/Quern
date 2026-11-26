@@ -8,7 +8,7 @@ pub enum ComparisonOp {
     NotEqual,   // !=
     LessThan,   // <
     GreaterThan,// >
-    LessEqual,  // =< 
+    LessEqual,  // =<
     GreaterEqual,// >=
 }
 
@@ -67,9 +67,9 @@ pub enum GuiWidget {
 #[derive(Debug, Clone)]
 pub enum Instruction {
     CreateStack(String),
-    Push(String, (String, bool)), 
+    Push(String, (String, bool)),
     Pop(String),
-    Out((String, bool)), 
+    Out((String, bool)),
     PrintNewLine,
     DeleteStack(String),
     CallFunction(String),
@@ -78,12 +78,14 @@ pub enum Instruction {
         operator: ArithmeticOp,
         value: String,
     },
-    ConditionalJump { 
+    ConditionalJump {
         left_stack: (String, bool),   // (名称, 是否为变量)
         right_stack: (String, bool),  // (名称, 是否为变量)
-        op: ComparisonOp, 
+        op: ComparisonOp,
         target_func: String,
     },
+    // --- 命令行参数识别：arg <stack> 将程序参数压入指定栈 ---
+    Arg(String),
     // --- Host API: hcl <Module>.<Func> <Args...> ---
     HostCall {
         module: String,

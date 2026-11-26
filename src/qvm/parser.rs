@@ -110,7 +110,7 @@ impl Parser {
 
     /// 判断一个token是否是指令关键字
     fn is_keyword(token: &str) -> bool {
-        matches!(token, "crt" | "psh" | "pop" | "out" | "otn" | "del" | "fnc" | "cal" | "jmp" | "hcl" | "skt" | "snd" | "rcv" | "cls" | "gui" | "pip" | "inp")
+        matches!(token, "crt" | "psh" | "pop" | "out" | "otn" | "del" | "fnc" | "cal" | "jmp" | "hcl" | "skt" | "snd" | "rcv" | "cls" | "gui" | "pip" | "inp" | "arg")
     }
 
     /// 解析 GUI 窗口块：tit/lbl/btn/txt 等控件命令
@@ -385,6 +385,18 @@ impl Parser {
                     });
                     block_line_numbers.push(current_line);
                 }
+                "arg" => {
+                    self.consume("arg").map_err(|_| self.create_error("MissingArgument", 1001, &cmd).to_string())?;
+                    let stack_ref = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd).to_string())?;
+                    // 去除 @ 变量包裹符，获取纯栈名
+                    let stack_name = if Self::is_variable(&stack_ref) {
+                        stack_ref[1..stack_ref.len()-1].to_string()
+                    } else {
+                        stack_ref
+                    };
+                    block_instrs.push(Instruction::Arg(stack_name));
+                    block_line_numbers.push(current_line);
+                }
                 _ => {
                     return Err(format!("Unknown command in block: {}", cmd));
                 }
@@ -614,6 +626,19 @@ impl Parser {
                         prompt_source: (prompt_content, prompt_is_var),
                         stack,
                     });
+                    instruction_line_numbers.push(current_line);
+                }
+                // === arg 指令解析（顶层） ===
+                "arg" => {
+                    self.consume("arg").map_err(|_| self.create_error("MissingArgument", 1001, &cmd))?;
+                    let stack_ref = self.next_arg().map_err(|_| self.create_error("UnexpectedEnd", 1002, &cmd))?;
+                    // 去除 @ 变量包裹符，获取纯栈名
+                    let stack_name = if Self::is_variable(&stack_ref) {
+                        stack_ref[1..stack_ref.len()-1].to_string()
+                    } else {
+                        stack_ref
+                    };
+                    instructions.push(Instruction::Arg(stack_name));
                     instruction_line_numbers.push(current_line);
                 }
                 _ => {
